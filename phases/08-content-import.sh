@@ -64,8 +64,15 @@ import_content() {
     # Import templates using Node.js script
     print_step "Importing design templates"
     
+    # Verify Node.js is available
+    if ! command -v node &> /dev/null; then
+        print_error "Node.js is not installed or not in PATH"
+        print_error "Please install Node.js and try again"
+        return 1
+    fi
+    
     if [[ ! -f "$scripts_dir/advanced-template-importer.js" ]]; then
-        print_error "Template importer script not found"
+        print_error "Template importer script not found: $scripts_dir/advanced-template-importer.js"
         return 1
     fi
     
@@ -75,9 +82,32 @@ import_content() {
     # Install Node.js dependencies for the importer
     if [[ -f "package.json" ]]; then
         print_step "Installing template importer dependencies"
-        npm install --silent &
-        spinner
-        wait $!
+        
+        # Check Node.js version
+        NODE_VERSION=$(node --version 2>/dev/null || echo "not found")
+        print_step "Node.js version: $NODE_VERSION"
+        
+        # Check if node_modules already exists
+        if [[ -d "node_modules" ]]; then
+            print_step "Dependencies already installed, skipping npm install"
+        else
+            # Run npm install with timeout and error handling
+            print_step "Installing Node.js dependencies (this may take a few minutes)"
+            timeout 300 npm install --silent 2>&1
+            npm_exit_code=$?
+            
+            if [[ $npm_exit_code -eq 124 ]]; then
+                print_warning "npm install timed out after 5 minutes"
+                print_step "Attempting to continue with existing dependencies"
+            elif [[ $npm_exit_code -ne 0 ]]; then
+                print_warning "npm install failed (exit code: $npm_exit_code)"
+                print_step "Attempting to continue anyway - some features may not work"
+            else
+                print_success "Template importer dependencies installed"
+            fi
+        fi
+    else
+        print_warning "No package.json found in scripts directory"
     fi
     
     # Set environment variable for database connection
@@ -86,12 +116,21 @@ import_content() {
     # Run template import with production settings
     print_step "Running template import"
     
-    node advanced-template-importer.js --limit 50 --force &
-    spinner
-    wait $!
+    # Check if the importer script exists and is readable
+    if [[ ! -r "advanced-template-importer.js" ]]; then
+        print_error "Template importer script is not readable"
+        return 1
+    fi
     
-    if [[ $? -ne 0 ]]; then
-        print_warning "Template import completed with warnings (this is normal for production)"
+    # Run the template import with timeout and better error handling
+    print_step "Starting template import (this may take several minutes)"
+    timeout 600 node advanced-template-importer.js --limit 50 --force 2>&1
+    import_exit_code=$?
+    
+    if [[ $import_exit_code -eq 124 ]]; then
+        print_warning "Template import timed out after 10 minutes, but may have partially completed"
+    elif [[ $import_exit_code -ne 0 ]]; then
+        print_warning "Template import completed with exit code $import_exit_code (this may be normal for production)"
     else
         print_success "Templates imported successfully"
     fi
