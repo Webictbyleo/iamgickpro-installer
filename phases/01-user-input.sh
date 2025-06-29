@@ -38,6 +38,20 @@ check_cached_config() {
                 [Nn]*) 
                     print_step "Starting fresh configuration"
                     log "User chose to reconfigure instead of using cache"
+                    
+                    # Clear all cached variables to force fresh input
+                    unset DOMAIN_NAME DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD
+                    unset MYSQL_ROOT_PASSWORD ADMIN_EMAIL ADMIN_PASSWORD 
+                    unset ADMIN_FIRST_NAME ADMIN_LAST_NAME APP_NAME
+                    unset MAIL_FROM_ADDRESS FRONTEND_URL UNSPLASH_API_KEY PEXELS_API_KEY
+                    unset INSTALL_IMAGEMAGICK INSTALL_FFMPEG NODE_VERSION
+                    
+                    # Reset to default values where applicable
+                    DB_HOST="localhost"
+                    DB_PORT="3306"
+                    APP_NAME="IAMGickPro"
+                    
+                    print_success "All configuration variables cleared for fresh input"
                     return 1
                     ;;
                 *) 
