@@ -6,10 +6,10 @@
 configure_environment() {
     print_step "Configuring environment files"
     
-    local backend_env="$TEMP_DIR/iamgickpro/backend/.env.local"
+    local backend_env="$TEMP_DIR/iamgickpro/backend/.env"
     local frontend_env="$TEMP_DIR/iamgickpro/frontend/.env"
     
-    # Generate backend .env.local file
+    # Generate backend .env file
     print_step "Creating backend environment configuration"
     
     cat > "$backend_env" << EOF
