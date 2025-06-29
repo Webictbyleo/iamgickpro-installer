@@ -77,61 +77,6 @@ install_basic_dependencies() {
     print_success "Basic dependencies installed"
 }
 
-# Check if package is available
-package_available() {
-    local package="$1"
-    if [[ "$PKG_MANAGER" == "apt" ]]; then
-        # For apt, check if package exists or if it's provided by another package
-        apt-cache show "$package" &>/dev/null || apt-cache search "^${package}$" | grep -q "$package"
-    elif [[ "$PKG_MANAGER" == "yum" ]]; then
-        yum list "$package" &>/dev/null
-    elif [[ "$PKG_MANAGER" == "dnf" ]]; then
-        dnf list "$package" &>/dev/null
-    else
-        return 1
-    fi
-}
-
-# Install package with error handling
-install_package_safe() {
-    local package="$1"
-    local optional="${2:-false}"
-    
-    printf "  Checking %s... " "$package"
-    
-    if package_available "$package"; then
-        printf "available, installing... "
-        if $PKG_INSTALL "$package" &>/dev/null; then
-            printf "${GREEN}✓${NC}\n"
-            log "Successfully installed: $package"
-            return 0
-        else
-            if [[ "$optional" == "true" ]]; then
-                printf "${YELLOW}failed (optional)${NC}\n"
-                print_warning "Failed to install optional package: $package"
-                log "Failed to install optional package: $package"
-                return 1
-            else
-                printf "${RED}✗${NC}\n"
-                print_error "Failed to install required package: $package"
-                log "Failed to install required package: $package"
-                exit 1
-            fi
-        fi
-    else
-        if [[ "$optional" == "true" ]]; then
-            printf "${YELLOW}not available (optional)${NC}\n"
-            log "Package not available: $package (optional)"
-            return 1
-        else
-            printf "${RED}not available${NC}\n"
-            print_error "Required package not available: $package"
-            log "Required package not available: $package"
-            exit 1
-        fi
-    fi
-}
-
 # Add PHP 8.4 repository
 add_php_repository() {
     print_step "Adding PHP 8.4 repository"
@@ -168,101 +113,72 @@ add_php_repository() {
 install_php() {
     print_step "Installing PHP 8.4 and extensions"
     
-    # Core PHP packages that are commonly available
-    local core_php_packages=(
-        "php8.4-common"
+    local php_packages=(
+        "php8.4"
         "php8.4-cli"
         "php8.4-fpm"
+        "php8.4-mysql"
+        "php8.4-pgsql"
+        "php8.4-sqlite3"
+        "php8.4-redis"
         "php8.4-curl"
         "php8.4-gd"
+        "php8.4-imagick"
         "php8.4-intl"
+        "php8.4-json"
         "php8.4-mbstring"
         "php8.4-opcache"
+        "php8.4-readline"
         "php8.4-xml"
         "php8.4-zip"
         "php8.4-bcmath"
-    )
-    
-    # Database extensions (commonly available)
-    local db_packages=(
-        "php8.4-mysql"
-        "php8.4-sqlite3"
-    )
-    
-    # Optional extensions (may not be available in all repositories)
-    local optional_packages=(
-        "php8.4-pgsql"
         "php8.4-soap"
-        "php8.4-readline"
-    )
-    
-    # Extensions that need to be installed via PECL or are rarely available
-    local pecl_packages=(
-        "php8.4-redis"
-        "php8.4-imagick"
-        "php8.4-xdebug"
+        "php8.4-xsl"
+        "php8.4-dev"
+        "php8.4-imap"
+        "php8.4-ldap"
+        "php8.4-msgpack"
+        "php8.4-igbinary"
         "php8.4-memcached"
+        "php8.4-pcov"
+        "php8.4-xdebug"
     )
     
     if [[ "$PKG_MANAGER" == "yum" || "$PKG_MANAGER" == "dnf" ]]; then
         # Adjust package names for RHEL-based systems
-        core_php_packages=(
-            "php-common"
+        php_packages=(
+            "php"
             "php-cli"
             "php-fpm"
+            "php-mysqlnd"
+            "php-pgsql"
+            "php-sqlite3"
+            "php-redis"
             "php-curl"
             "php-gd"
+            "php-imagick"
             "php-intl"
+            "php-json"
             "php-mbstring"
             "php-opcache"
+            "php-readline"
             "php-xml"
             "php-zip"
             "php-bcmath"
-        )
-        
-        db_packages=(
-            "php-mysqlnd"
-            "php-sqlite3"
-        )
-        
-        optional_packages=(
-            "php-pgsql"
             "php-soap"
-        )
-        
-        pecl_packages=(
-            "php-redis"
-            "php-pecl-imagick"
+            "php-xsl"
+            "php-devel"
+            "php-imap"
+            "php-ldap"
+            "php-pecl-msgpack"
+            "php-pecl-igbinary"
+            "php-pecl-memcached"
         )
     fi
     
-    # Install core packages first (these are essential)
-    print_step "Installing core PHP packages..."
-    for package in "${core_php_packages[@]}"; do
-        install_package_safe "$package" false
-    done
-    
-    # Install database packages (MySQL is essential, others optional)
-    print_step "Installing PHP database extensions..."
-    for package in "${db_packages[@]}"; do
-        if [[ "$package" == "php8.4-mysql" || "$package" == "php-mysqlnd" ]]; then
-            install_package_safe "$package" false  # MySQL is required
-        else
-            install_package_safe "$package" true   # Others are optional
-        fi
-    done
-    
-    # Install optional packages
-    print_step "Installing optional PHP extensions..."
-    for package in "${optional_packages[@]}"; do
-        install_package_safe "$package" true
-    done
-    
-    # Try to install PECL packages (these often fail, so make them optional)
-    print_step "Installing PECL extensions (if available)..."
-    for package in "${pecl_packages[@]}"; do
-        install_package_safe "$package" true
-    done
+    $PKG_INSTALL "${php_packages[@]}" &
+    spinner
+    wait $!
     
     # Verify PHP installation
     if ! php -v | grep -q "8.4"; then
@@ -423,16 +339,9 @@ configure_php() {
         sed -i 's/;opcache.enable=1/opcache.enable=1/' "$php_ini"
         sed -i 's/;opcache.memory_consumption=128/opcache.memory_consumption=256/' "$php_ini"
         
-        # Enable extensions (only if they're available)
-        if package_available "php8.4-gd" || php -m | grep -q "gd"; then
-            echo "extension=gd" >> "$php_ini"
-        fi
-        
-        if package_available "php8.4-imagick" || php -m | grep -q "imagick"; then
-            echo "extension=imagick" >> "$php_ini"
-        fi
-        
-        # These should always be available
+        # Enable extensions
+        echo "extension=gd" >> "$php_ini"
+        echo "extension=imagick" >> "$php_ini"
         echo "extension=zip" >> "$php_ini"
         echo "extension=curl" >> "$php_ini"
         echo "extension=mbstring" >> "$php_ini"
