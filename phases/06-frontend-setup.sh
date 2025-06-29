@@ -382,7 +382,7 @@ EOF
     
     # Cleanup temporary build directory
     print_step "Cleaning up build files"
-    rm -rf "$frontend_build_dir"
+   # rm -rf "$frontend_build_dir"
     print_success "Build cleanup completed"
 }
 
