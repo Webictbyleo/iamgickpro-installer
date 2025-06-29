@@ -116,14 +116,16 @@ install_php() {
     # Show information about package selection
     echo -e "${CYAN}ℹ Installing only essential PHP extensions required by IAMGickPro:${NC}"
     echo -e "${CYAN}  • Based on composer.json requirements${NC}"
-    echo -e "${CYAN}  • Includes core extensions: cli, fpm, mysql, curl, gd, intl, mbstring, opcache, xml, zip, bcmath${NC}"
+    echo -e "${CYAN}  • Includes core extensions: common, cli, fpm, dev, mysql, curl, gd, intl, mbstring, opcache, xml, zip, bcmath${NC}"
     echo -e "${CYAN}  • Optional extensions (redis, imagick) will be installed if available${NC}"
     echo
     
     # Core PHP packages required by IAMGickPro (based on composer.json)
     local php_packages=(
+        "php8.4-common"
         "php8.4-cli"
         "php8.4-fpm"
+        "php8.4-dev"
         "php8.4-mysql"
         "php8.4-curl"
         "php8.4-gd"
@@ -139,8 +141,10 @@ install_php() {
         # Adjust package names for RHEL-based systems
         php_packages=(
             "php"
+            "php-common"
             "php-cli"
             "php-fpm"
+            "php-devel"
             "php-mysqlnd"
             "php-curl"
             "php-gd"
