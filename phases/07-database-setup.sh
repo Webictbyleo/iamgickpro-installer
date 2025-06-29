@@ -121,12 +121,16 @@ EOF
     else
         print_step "No migration files found, creating schema directly"
         
+        # Debug: Check what's in the .env file
+        print_step "Checking current .env configuration"
+        echo "Current MESSENGER_TRANSPORT_DSN in .env:"
+        grep MESSENGER_TRANSPORT_DSN .env || echo "No MESSENGER_TRANSPORT_DSN found in .env"
+        echo "Current environment variables:"
+        env | grep MESSENGER || echo "No MESSENGER env vars found"
+        
         # Create schema using Doctrine entities
-        # Temporarily disable messenger to avoid transport issues during schema creation
-        export MESSENGER_TRANSPORT_DSN=""
         php bin/console doctrine:schema:create --env=prod 2>&1
         schema_result=$?
-        unset MESSENGER_TRANSPORT_DSN
         
         if [[ $schema_result -ne 0 ]]; then
             print_error "Failed to create database schema"
