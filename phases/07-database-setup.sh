@@ -102,9 +102,12 @@ EOF
             print_warning "Migration failed, attempting to create schema directly"
             
             # Clear any partial schema and recreate
+            # Temporarily disable messenger to avoid transport issues
+            export MESSENGER_TRANSPORT_DSN=""
             php bin/console doctrine:schema:drop --force --env=prod 2>/dev/null || true
             php bin/console doctrine:schema:create --env=prod 2>&1
             schema_result=$?
+            unset MESSENGER_TRANSPORT_DSN
             
             if [[ $schema_result -ne 0 ]]; then
                 print_error "Failed to create database schema"
@@ -119,8 +122,11 @@ EOF
         print_step "No migration files found, creating schema directly"
         
         # Create schema using Doctrine entities
+        # Temporarily disable messenger to avoid transport issues during schema creation
+        export MESSENGER_TRANSPORT_DSN=""
         php bin/console doctrine:schema:create --env=prod 2>&1
         schema_result=$?
+        unset MESSENGER_TRANSPORT_DSN
         
         if [[ $schema_result -ne 0 ]]; then
             print_error "Failed to create database schema"

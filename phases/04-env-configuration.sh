@@ -40,11 +40,11 @@ FRONTEND_URL="$FRONTEND_URL"
 UPLOAD_DIR=%kernel.project_dir%/public/uploads
 MAX_UPLOAD_SIZE=50M
 
-# Redis Configuration (for caching and sessions)
-REDIS_URL=redis://localhost:6379
+# Redis Configuration (for caching and sessions - optional)
+# REDIS_URL=redis://localhost:6379
 
 # Messenger Configuration (for async jobs)
-MESSENGER_TRANSPORT_DSN=redis://localhost:6379/messages
+MESSENGER_TRANSPORT_DSN=doctrine://default
 
 # External Services
 UNSPLASH_ACCESS_KEY="$UNSPLASH_API_KEY"
