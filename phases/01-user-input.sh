@@ -256,6 +256,7 @@ collect_user_input() {
     echo -e "${CYAN}Database:${NC} $DB_NAME @ $DB_HOST:$DB_PORT"
     echo -e "${CYAN}Database User:${NC} $DB_USER"
     echo -e "${CYAN}Admin Email:${NC} $ADMIN_EMAIL"
+    echo -e "${CYAN}Admin Name:${NC} $ADMIN_FIRST_NAME $ADMIN_LAST_NAME"
     echo -e "${CYAN}App Name:${NC} $APP_NAME"
     echo -e "${CYAN}Node.js:${NC} $NODE_VERSION"
     echo -e "${CYAN}ImageMagick:${NC} Compiled from source"
