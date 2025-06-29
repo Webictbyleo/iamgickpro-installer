@@ -72,18 +72,56 @@ setup_backend() {
     
     mkdir -p config/jwt
     
+    # Extract JWT passphrase from .env file more safely
+    JWT_PASSPHRASE=$(grep "^JWT_PASSPHRASE=" .env | cut -d'=' -f2- | sed 's/^"//' | sed 's/"$//')
+    
+    if [[ -z "$JWT_PASSPHRASE" ]]; then
+        print_error "JWT_PASSPHRASE not found in .env file"
+        return 1
+    fi
+    
+    print_step "Using JWT passphrase from environment configuration"
+    
     # Generate private key
-    openssl genpkey -algorithm RSA -out config/jwt/private.pem -aes256 -pass pass:"$(grep JWT_PASSPHRASE .env | cut -d'=' -f2)" -pkeyopt rsa_keygen_bits:4096
+    openssl genpkey -algorithm RSA -out config/jwt/private.pem -aes256 -pass pass:"$JWT_PASSPHRASE" -pkeyopt rsa_keygen_bits:4096
+    
+    if [[ $? -ne 0 ]]; then
+        print_error "Failed to generate JWT private key"
+        return 1
+    fi
     
     # Generate public key  
-    openssl pkey -in config/jwt/private.pem -out config/jwt/public.pem -pubout -passin pass:"$(grep JWT_PASSPHRASE .env | cut -d'=' -f2)"
+    openssl pkey -in config/jwt/private.pem -out config/jwt/public.pem -pubout -passin pass:"$JWT_PASSPHRASE"
+    
+    if [[ $? -ne 0 ]]; then
+        print_error "Failed to generate JWT public key"
+        return 1
+    fi
+    
+    # Verify the keys were created successfully
+    if [[ ! -f "config/jwt/private.pem" ]] || [[ ! -f "config/jwt/public.pem" ]]; then
+        print_error "JWT key files were not created successfully"
+        return 1
+    fi
     
     # Set JWT key permissions
     chmod 600 config/jwt/private.pem
     chmod 644 config/jwt/public.pem
     chown www-data:www-data config/jwt/*.pem
     
-    print_success "JWT keys generated"
+    # Verify JWT configuration with Symfony
+    print_step "Verifying JWT configuration"
+    
+    # Test JWT key loading with a simple Symfony command
+    php bin/console debug:config lexik_jwt_authentication &> /dev/null
+    if [[ $? -ne 0 ]]; then
+        print_warning "JWT configuration test failed, but continuing installation"
+        print_warning "You may need to regenerate JWT keys after installation"
+    else
+        print_success "JWT configuration verified"
+    fi
+    
+    print_success "JWT keys generated and configured"
     
     # Clear and warm up cache
     print_step "Optimizing application cache"
@@ -174,6 +212,92 @@ EOF
     systemctl enable iamgickpro-worker.service
     
     print_success "Background worker service configured"
+    
+    # Create JWT key regeneration script for troubleshooting
+    print_step "Creating JWT key regeneration script"
+    
+    cat > /usr/local/bin/iamgickpro-regenerate-jwt << 'EOF'
+#!/bin/bash
+# IAMGickPro JWT Key Regeneration Script
+
+BACKEND_DIR="$1"
+if [[ -z "$BACKEND_DIR" ]]; then
+    echo "Usage: $0 <backend_directory>"
+    echo "Example: $0 /var/www/iamgickpro/backend"
+    exit 1
+fi
+
+if [[ ! -d "$BACKEND_DIR" ]]; then
+    echo "Error: Backend directory '$BACKEND_DIR' does not exist"
+    exit 1
+fi
+
+cd "$BACKEND_DIR"
+
+if [[ ! -f ".env" ]]; then
+    echo "Error: .env file not found in $BACKEND_DIR"
+    exit 1
+fi
+
+echo "Regenerating JWT keys for IAMGickPro..."
+
+# Extract JWT passphrase
+JWT_PASSPHRASE=$(grep "^JWT_PASSPHRASE=" .env | cut -d'=' -f2- | sed 's/^"//' | sed 's/"$//')
+
+if [[ -z "$JWT_PASSPHRASE" ]]; then
+    echo "Error: JWT_PASSPHRASE not found in .env file"
+    exit 1
+fi
+
+# Backup existing keys
+if [[ -f "config/jwt/private.pem" ]]; then
+    cp config/jwt/private.pem config/jwt/private.pem.backup.$(date +%Y%m%d_%H%M%S)
+    echo "Backed up existing private key"
+fi
+
+if [[ -f "config/jwt/public.pem" ]]; then
+    cp config/jwt/public.pem config/jwt/public.pem.backup.$(date +%Y%m%d_%H%M%S)
+    echo "Backed up existing public key"
+fi
+
+# Create JWT directory
+mkdir -p config/jwt
+
+# Generate new keys
+echo "Generating new JWT private key..."
+openssl genpkey -algorithm RSA -out config/jwt/private.pem -aes256 -pass pass:"$JWT_PASSPHRASE" -pkeyopt rsa_keygen_bits:4096
+
+if [[ $? -ne 0 ]]; then
+    echo "Error: Failed to generate JWT private key"
+    exit 1
+fi
+
+echo "Generating new JWT public key..."
+openssl pkey -in config/jwt/private.pem -out config/jwt/public.pem -pubout -passin pass:"$JWT_PASSPHRASE"
+
+if [[ $? -ne 0 ]]; then
+    echo "Error: Failed to generate JWT public key"
+    exit 1
+fi
+
+# Set proper permissions
+chmod 600 config/jwt/private.pem
+chmod 644 config/jwt/public.pem
+chown www-data:www-data config/jwt/*.pem
+
+echo "JWT keys regenerated successfully!"
+
+# Clear cache
+echo "Clearing Symfony cache..."
+php bin/console cache:clear --env=prod --no-debug
+
+echo "Done! JWT keys have been regenerated and cache cleared."
+echo "You can now try logging in again."
+EOF
+
+    chmod +x /usr/local/bin/iamgickpro-regenerate-jwt
+    
+    print_success "JWT regeneration script created at /usr/local/bin/iamgickpro-regenerate-jwt"
     
     print_success "Backend setup completed"
 }
