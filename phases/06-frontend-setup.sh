@@ -41,6 +41,49 @@ setup_frontend() {
     
     local frontend_build_dir="$TEMP_DIR/frontend-build"
     
+    # Check if frontend needs rebuilding using Git
+    local needs_rebuild=false
+    local webroot_index="$webroot/index.html"
+    local git_hash_file="$webroot/.git-hash"
+    
+    if [[ ! -f "$webroot_index" ]]; then
+        print_step "Frontend not deployed yet, build required"
+        needs_rebuild=true
+    elif [[ ! -d "$frontend_source/.git" ]]; then
+        print_step "Not a git repository, performing build to be safe"
+        needs_rebuild=true
+    else
+        # Get current git hash of frontend directory
+        cd "$frontend_source"
+        local current_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        local frontend_files_hash=$(git log -1 --format="%H" --name-only . 2>/dev/null | head -1 || echo "unknown")
+        
+        if [[ ! -f "$git_hash_file" ]]; then
+            print_step "No previous build hash found, build required"
+            needs_rebuild=true
+        else
+            local previous_hash=$(cat "$git_hash_file" 2>/dev/null || echo "")
+            
+            if [[ "$frontend_files_hash" != "$previous_hash" ]]; then
+                print_step "Frontend files have changed since last build (hash: ${frontend_files_hash:0:8}), rebuild required"
+                needs_rebuild=true
+            else
+                print_success "Frontend is up to date (hash: ${frontend_files_hash:0:8}), skipping build"
+                needs_rebuild=false
+            fi
+        fi
+    fi
+    
+    if [[ "$needs_rebuild" == "false" ]]; then
+        print_success "Frontend build skipped - no changes detected"
+        
+        # Still need to configure nginx and set permissions
+        print_step "Ensuring nginx configuration is current"
+        # Jump to nginx configuration section
+        configure_nginx_and_permissions
+        return 0
+    fi
+    
     # Remove existing build directory if it exists
     rm -rf "$frontend_build_dir"
     
@@ -73,35 +116,82 @@ setup_frontend() {
     # Install npm dependencies
     print_step "Installing frontend dependencies"
     
-    # Clean npm cache to avoid issues
-    npm cache clean --force > /dev/null 2>&1 || true
+    # Check if npm install is needed using Git
+    local needs_npm_install=false
+    local node_modules_hash_file="$frontend_build_dir/.npm-install-hash"
     
-    # Capture npm output for debugging
-    local npm_log_file="${TEMP_DIR}/npm_install.log"
-    
-    # Use npm install (includes dev dependencies needed for build)
-    print_step "Running npm install..."
-    
-    # Set a timeout for npm install (10 minutes)
-    timeout 600 npm install > "$npm_log_file" 2>&1 &
-    local npm_pid=$!
-    spinner
-    wait $npm_pid
-    local npm_exit_code=$?
-    
-    if [[ $npm_exit_code -eq 124 ]]; then
-        print_error "NPM install timed out after 10 minutes"
-        echo "Last 50 lines of NPM output:"
-        tail -n 50 "$npm_log_file" 2>/dev/null || echo "No output file found"
-        return 1
-    elif [[ $npm_exit_code -ne 0 ]]; then
-        print_error "NPM install failed (exit code: $npm_exit_code)"
-        echo "NPM install output:"
-        cat "$npm_log_file"
-        return 1
+    if [[ ! -d "node_modules" ]]; then
+        print_step "node_modules not found, npm install required"
+        needs_npm_install=true
+    else
+        # Get hash of package.json and package-lock.json
+        local package_files_hash=""
+        if [[ -f "package.json" ]]; then
+            package_files_hash=$(git hash-object package.json 2>/dev/null || echo "no-git")
+        fi
+        if [[ -f "package-lock.json" ]]; then
+            local lock_hash=$(git hash-object package-lock.json 2>/dev/null || echo "no-git")
+            package_files_hash="${package_files_hash}-${lock_hash}"
+        fi
+        
+        if [[ ! -f "$node_modules_hash_file" ]]; then
+            print_step "No previous npm install hash found, npm install required"
+            needs_npm_install=true
+        else
+            local previous_package_hash=$(cat "$node_modules_hash_file" 2>/dev/null || echo "")
+            
+            if [[ "$package_files_hash" != "$previous_package_hash" ]]; then
+                print_step "package.json or package-lock.json has changed, npm install required"
+                needs_npm_install=true
+            else
+                print_success "Dependencies are up to date, skipping npm install"
+                needs_npm_install=false
+            fi
+        fi
     fi
     
-    print_success "Frontend dependencies installed"
+    if [[ "$needs_npm_install" == "true" ]]; then
+        # Clean npm cache to avoid issues
+        npm cache clean --force > /dev/null 2>&1 || true
+        
+        # Capture npm output for debugging
+        local npm_log_file="${TEMP_DIR}/npm_install.log"
+        
+        # Use npm install (includes dev dependencies needed for build)
+        print_step "Running npm install..."
+        
+        # Set a timeout for npm install (10 minutes)
+        timeout 600 npm install > "$npm_log_file" 2>&1 &
+        local npm_pid=$!
+        spinner
+        wait $npm_pid
+        local npm_exit_code=$?
+        
+        if [[ $npm_exit_code -eq 124 ]]; then
+            print_error "NPM install timed out after 10 minutes"
+            echo "Last 50 lines of NPM output:"
+            tail -n 50 "$npm_log_file" 2>/dev/null || echo "No output file found"
+            return 1
+        elif [[ $npm_exit_code -ne 0 ]]; then
+            print_error "NPM install failed (exit code: $npm_exit_code)"
+            echo "NPM install output:"
+            cat "$npm_log_file"
+            return 1
+        fi
+        
+        print_success "Frontend dependencies installed"
+        
+        # Save the package files hash for future checks
+        local package_files_hash=""
+        if [[ -f "package.json" ]]; then
+            package_files_hash=$(git hash-object package.json 2>/dev/null || echo "no-git")
+        fi
+        if [[ -f "package-lock.json" ]]; then
+            local lock_hash=$(git hash-object package-lock.json 2>/dev/null || echo "no-git")
+            package_files_hash="${package_files_hash}-${lock_hash}"
+        fi
+        echo "$package_files_hash" > "$node_modules_hash_file"
+    fi
     
     # Verify node_modules was created and contains essential packages
     print_step "Validating dependency installation"
@@ -183,6 +273,24 @@ setup_frontend() {
     
     print_success "Frontend deployed to webroot"
     
+    # Save the git hash for future builds
+    cd "$frontend_source"
+    local frontend_files_hash=$(git log -1 --format="%H" --name-only . 2>/dev/null | head -1 || echo "unknown")
+    echo "$frontend_files_hash" > "$webroot/.git-hash"
+    
+    # Configure nginx and set permissions
+    configure_nginx_and_permissions
+    
+    print_success "Frontend setup completed"
+    
+    # Cleanup temporary build directory
+    print_step "Cleaning up build files"
+    rm -rf "$frontend_build_dir"
+    print_success "Build cleanup completed"
+}
+
+# Configure nginx and set permissions (extracted as separate function)
+configure_nginx_and_permissions() {
     # Set proper permissions on webroot
     print_step "Setting webroot permissions"
     
@@ -356,13 +464,6 @@ EOF
     else
         print_warning "No common static files (js/css/ico) found in webroot"
     fi
-    
-    print_success "Frontend setup completed"
-    
-    # Cleanup temporary build directory
-    print_step "Cleaning up build files"
-    rm -rf "$frontend_build_dir"
-    print_success "Build cleanup completed"
 }
 
 # Run the setup
