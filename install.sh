@@ -18,7 +18,7 @@
 set -euo pipefail
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 readonly LOG_FILE="/var/log/iamgickpro-install.log"
 readonly INSTALL_DIR="/var/www/html/iamgickpro"
 readonly TEMP_DIR="/tmp/iamgickpro-install"
@@ -159,7 +159,14 @@ ensure_installer_complete() {
         local installer_temp="$TEMP_DIR/installer"
         print_step "Cloning installer repository"
         
-        if git clone "$INSTALLER_REPO_URL" "$installer_temp" &>/dev/null; then
+        # Test GitHub connectivity first
+        if ! curl -s --connect-timeout 10 https://github.com > /dev/null; then
+            print_error "Cannot reach GitHub. Please check your internet connection."
+            exit 1
+        fi
+        
+        # Try to clone the repository
+        if git clone --quiet --depth 1 "$INSTALLER_REPO_URL" "$installer_temp" 2>/dev/null; then
             if [[ -d "$installer_temp/phases" ]]; then
                 # Update SCRIPT_DIR to point to the complete installer
                 SCRIPT_DIR="$installer_temp"
@@ -169,9 +176,41 @@ ensure_installer_complete() {
                 exit 1
             fi
         else
-            print_error "Failed to download installer from GitHub"
-            print_error "Please check your internet connection and try again"
-            exit 1
+            print_error "Failed to clone installer repository"
+            print_error "Repository URL: $INSTALLER_REPO_URL"
+            print_error "This might happen if:"
+            print_error "1. The repository doesn't exist yet (you need to push it to GitHub)"
+            print_error "2. The repository is private"
+            print_error "3. Network connectivity issues"
+            echo
+            print_step "Attempting alternative download method..."
+            
+            # Try downloading as zip file instead
+            local zip_url="https://github.com/Webictbyleo/iamgickpro-installer/archive/refs/heads/main.zip"
+            if command -v wget &> /dev/null; then
+                if wget -q "$zip_url" -O "$installer_temp.zip" 2>/dev/null; then
+                    if command -v unzip &> /dev/null || { apt-get install -y unzip &>/dev/null; }; then
+                        unzip -q "$installer_temp.zip" -d "$(dirname "$installer_temp")" 2>/dev/null
+                        mv "$(dirname "$installer_temp")/iamgickpro-installer-main" "$installer_temp" 2>/dev/null || true
+                        if [[ -d "$installer_temp/phases" ]]; then
+                            SCRIPT_DIR="$installer_temp"
+                            print_success "Downloaded installer via zip archive"
+                        else
+                            print_error "Zip download failed or incomplete"
+                            exit 1
+                        fi
+                    else
+                        print_error "Cannot install unzip utility"
+                        exit 1
+                    fi
+                else
+                    print_error "Alternative download also failed"
+                    exit 1
+                fi
+            else
+                print_error "wget not available for alternative download"
+                exit 1
+            fi
         fi
         
         echo
