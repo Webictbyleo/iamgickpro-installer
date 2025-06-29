@@ -66,7 +66,7 @@ verify_repository_structure() {
     local required_files=(
         "$TEMP_DIR/iamgickpro/backend/composer.json"
         "$TEMP_DIR/iamgickpro/frontend/package.json"
-        "$TEMP_DIR/iamgickpro/backend/.env.example"
+        "$TEMP_DIR/iamgickpro/backend/.env.local.example"
         "$TEMP_DIR/iamgickpro/frontend/.env.example"
     )
     
