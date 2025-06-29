@@ -111,37 +111,28 @@ add_php_repository() {
 
 # Install PHP 8.4 and extensions
 install_php() {
-    print_step "Installing PHP 8.4 and extensions"
+    print_step "Installing PHP 8.4 and essential extensions"
     
+    # Show information about package selection
+    echo -e "${CYAN}ℹ Installing only essential PHP extensions required by IAMGickPro:${NC}"
+    echo -e "${CYAN}  • Based on composer.json requirements${NC}"
+    echo -e "${CYAN}  • Includes core extensions: cli, fpm, mysql, curl, gd, intl, mbstring, opcache, xml, zip, bcmath${NC}"
+    echo -e "${CYAN}  • Optional extensions (redis, imagick) will be installed if available${NC}"
+    echo
+    
+    # Core PHP packages required by IAMGickPro (based on composer.json)
     local php_packages=(
-        "php8.4"
         "php8.4-cli"
         "php8.4-fpm"
         "php8.4-mysql"
-        "php8.4-pgsql"
-        "php8.4-sqlite3"
-        "php8.4-redis"
         "php8.4-curl"
         "php8.4-gd"
-        "php8.4-imagick"
         "php8.4-intl"
-        "php8.4-json"
         "php8.4-mbstring"
         "php8.4-opcache"
-        "php8.4-readline"
         "php8.4-xml"
         "php8.4-zip"
         "php8.4-bcmath"
-        "php8.4-soap"
-        "php8.4-xsl"
-        "php8.4-dev"
-        "php8.4-imap"
-        "php8.4-ldap"
-        "php8.4-msgpack"
-        "php8.4-igbinary"
-        "php8.4-memcached"
-        "php8.4-pcov"
-        "php8.4-xdebug"
     )
     
     if [[ "$PKG_MANAGER" == "yum" || "$PKG_MANAGER" == "dnf" ]]; then
@@ -151,39 +142,66 @@ install_php() {
             "php-cli"
             "php-fpm"
             "php-mysqlnd"
-            "php-pgsql"
-            "php-sqlite3"
-            "php-redis"
             "php-curl"
             "php-gd"
-            "php-imagick"
             "php-intl"
-            "php-json"
             "php-mbstring"
             "php-opcache"
-            "php-readline"
             "php-xml"
             "php-zip"
             "php-bcmath"
-            "php-soap"
-            "php-xsl"
-            "php-devel"
-            "php-imap"
-            "php-ldap"
-            "php-pecl-msgpack"
-            "php-pecl-igbinary"
-            "php-pecl-memcached"
         )
     fi
     
-    $PKG_INSTALL "${php_packages[@]}" &
-    spinner
-    wait $!
+    # Install core PHP packages
+    print_step "Installing core PHP packages"
+    if ! $PKG_INSTALL "${php_packages[@]}" 2>/dev/null; then
+        print_error "Failed to install core PHP packages"
+        log_error "Package installation failed: ${php_packages[*]}"
+        exit 1
+    fi
+    
+    # Install additional useful extensions (optional)
+    local additional_packages=()
+    if [[ "$PKG_MANAGER" == "apt" ]]; then
+        additional_packages=(
+            "php8.4-redis"
+            "php8.4-imagick"
+        )
+    fi
+    
+    if [[ ${#additional_packages[@]} -gt 0 ]]; then
+        print_step "Installing additional PHP extensions"
+        for package in "${additional_packages[@]}"; do
+            if $PKG_INSTALL "$package" 2>/dev/null; then
+                print_success "Installed $package"
+                log "Successfully installed optional package: $package"
+            else
+                print_warning "Optional package $package not available, skipping"
+                log_warning "Optional package not available: $package"
+            fi
+        done
+    fi
     
     # Verify PHP installation
-    if ! php -v | grep -q "8.4"; then
-        print_error "PHP 8.4 installation failed"
+    if ! command -v php &> /dev/null; then
+        print_error "PHP command not found after installation"
         exit 1
+    fi
+    
+    local php_version
+    php_version=$(php -v 2>/dev/null | head -n1 | grep -oP 'PHP \K[0-9]+\.[0-9]+' || echo "unknown")
+    
+    if [[ "$php_version" != "8.4" ]]; then
+        print_warning "PHP version is $php_version, expected 8.4"
+        log_warning "PHP version mismatch: expected 8.4, got $php_version"
+        
+        # Check if PHP 8.4 is available but not default
+        if command -v php8.4 &> /dev/null; then
+            print_step "Setting PHP 8.4 as default"
+            update-alternatives --install /usr/bin/php php /usr/bin/php8.4 84 2>/dev/null || true
+            php_version=$(php -v 2>/dev/null | head -n1 | grep -oP 'PHP \K[0-9]+\.[0-9]+' || echo "unknown")
+        fi
     fi
     
     print_success "PHP 8.4 and extensions installed"
