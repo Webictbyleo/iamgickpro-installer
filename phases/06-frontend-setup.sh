@@ -7,7 +7,6 @@ setup_frontend() {
     print_step "Setting up frontend application"
     
     local frontend_source="$TEMP_DIR/iamgickpro/frontend"
-    local frontend_dest="$INSTALL_DIR/frontend"
     local webroot="$INSTALL_DIR/public"
     
     # Verify frontend source exists
@@ -37,13 +36,19 @@ setup_frontend() {
         print_success "Node.js $(node -v) already available"
     fi
     
-    # Copy frontend source to temporary build location  
+    # Copy frontend source to temporary build location (not install directory)
     print_step "Preparing frontend build"
     
-    mkdir -p "$frontend_dest"
-    cp -r "$frontend_source/"* "$frontend_dest/"
+    local frontend_build_dir="$TEMP_DIR/frontend-build"
     
-    cd "$frontend_dest"
+    # Remove existing build directory if it exists
+    rm -rf "$frontend_build_dir"
+    
+    # Copy frontend source to temporary build location
+    mkdir -p "$frontend_build_dir"
+    cp -r "$frontend_source/"* "$frontend_build_dir/"
+    
+    cd "$frontend_build_dir"
     
     # Verify package.json exists
     if [[ ! -f "package.json" ]]; then
@@ -158,20 +163,34 @@ setup_frontend() {
     # Deploy built files to webroot
     print_step "Deploying frontend to webroot"
     
+    # Ensure webroot exists
     mkdir -p "$webroot"
     
-    # Copy built files to webroot
-    cp -r dist/* "$webroot/"
+    # Copy only the built files from dist to webroot
+    if [[ -d "dist" ]] && [[ -n "$(ls -A dist 2>/dev/null)" ]]; then
+        cp -r dist/* "$webroot/"
+        print_success "Frontend dist files copied to webroot"
+    else
+        print_error "Frontend dist directory is empty or missing"
+        return 1
+    fi
     
-    # Create necessary subdirectories in webroot
-    mkdir -p "$webroot/api"
-    mkdir -p "$webroot/uploads"
+    # Verify essential frontend files exist in webroot
+    if [[ ! -f "$webroot/index.html" ]]; then
+        print_error "index.html not found in webroot after deployment"
+        return 1
+    fi
     
-    # Set proper permissions
+    print_success "Frontend deployed to webroot"
+    
+    # Set proper permissions on webroot
+    print_step "Setting webroot permissions"
+    
+    # Set proper ownership and permissions
     chown -R www-data:www-data "$webroot"
     chmod -R 755 "$webroot"
     
-    print_success "Frontend deployed to webroot"
+    print_success "Webroot permissions set"
     
     # Create nginx configuration
     print_step "Configuring nginx"
@@ -201,15 +220,6 @@ server {
     location /api/ {
         root $INSTALL_DIR/backend/public;
         try_files \$uri /index.php\$is_args\$args;
-        
-        # Handle PHP files in API
-        location ~ \.php$ {
-            fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
-            fastcgi_index index.php;
-            include fastcgi_params;
-            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-            fastcgi_param HTTPS off;
-        }
     }
 
     # Media file routes (serve from backend)
@@ -256,10 +266,16 @@ server {
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
     }
-
+    # Handle PHP files in API
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
+        fastcgi_index index.php;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param HTTPS off;
+    }
     # Frontend routes (SPA) - must be last to catch all remaining routes
     location / {
-        root $webroot/frontend/dist;
         try_files \$uri \$uri/ /index.html;
     }
 
@@ -312,8 +328,25 @@ EOF
         return 1
     fi
     
-    if [[ ! -d "$webroot/assets" ]]; then
-        print_warning "Frontend validation warning: assets directory not found"
+    # Check for assets directory (common in Vite builds)
+    if [[ -d "$webroot/assets" ]]; then
+        print_success "Frontend assets directory found"
+    else
+        print_warning "Frontend validation warning: assets directory not found (may be in different location)"
+    fi
+    
+    # Check for common static files
+    local static_files_found=0
+    for pattern in "*.js" "*.css" "*.ico"; do
+        if ls "$webroot"/$pattern 1> /dev/null 2>&1 || find "$webroot" -name "$pattern" -type f | grep -q .; then
+            static_files_found=$((static_files_found + 1))
+        fi
+    done
+    
+    if [[ $static_files_found -gt 0 ]]; then
+        print_success "Frontend static files validated ($static_files_found types found)"
+    else
+        print_warning "No common static files (js/css/ico) found in webroot"
     fi
     
     # Test if site is accessible
@@ -327,9 +360,9 @@ EOF
     
     print_success "Frontend setup completed"
     
-    # Cleanup build directory
+    # Cleanup temporary build directory
     print_step "Cleaning up build files"
-    rm -rf "$frontend_dest"
+    rm -rf "$frontend_build_dir"
     print_success "Build cleanup completed"
 }
 
