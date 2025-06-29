@@ -106,25 +106,7 @@ import_content() {
             fi
         fi
         
-        # Install native dependencies required for canvas package
-        print_step "Installing native dependencies for canvas package"
-        apt-get update -qq > /dev/null 2>&1
-        apt-get install -y \
-            build-essential \
-            libcairo2-dev \
-            libpango1.0-dev \
-            libjpeg-dev \
-            libgif-dev \
-            librsvg2-dev \
-            libpixman-1-dev \
-            libffi-dev \
-            pkg-config > /dev/null 2>&1
         
-        if [[ $? -eq 0 ]]; then
-            print_success "Native dependencies installed"
-        else
-            print_warning "Some native dependencies may have failed to install"
-        fi
         
         # Check if node_modules already exists
         if [[ -d "node_modules" ]]; then
@@ -132,11 +114,18 @@ import_content() {
         else
             # Run npm install with timeout and error handling
             print_step "Installing Node.js dependencies (this may take a few minutes)"
-            timeout 300 npm install 2>&1
+            print_step "Working directory: $(pwd)"
+            print_step "Running: npm install"
+            
+            # Clear npm cache first to avoid issues
+            npm cache clean --force 2>/dev/null || true
+            
+            # Run npm install without output redirection to see real-time output
+            timeout 600 npm install --verbose
             npm_exit_code=$?
             
             if [[ $npm_exit_code -eq 124 ]]; then
-                print_warning "npm install timed out after 5 minutes"
+                print_warning "npm install timed out after 10 minutes"
                 print_step "Attempting to continue with existing dependencies"
             elif [[ $npm_exit_code -ne 0 ]]; then
                 print_warning "npm install failed (exit code: $npm_exit_code)"
