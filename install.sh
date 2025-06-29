@@ -140,6 +140,15 @@ check_root() {
     fi
 }
 
+# Check if running in interactive mode
+check_interactive() {
+    if [[ ! -t 0 ]]; then
+        print_warning "Script is not running in interactive mode"
+        print_warning "If you're piping the script, please download and run it directly"
+        print_warning "Example: wget script.sh && chmod +x script.sh && sudo ./script.sh"
+    fi
+}
+
 # Check system requirements
 check_system() {
     print_step "Checking system requirements"
@@ -211,11 +220,21 @@ show_welcome() {
     echo
     
     while true; do
-        read -p "Do you want to continue? (y/N): " -r
+        printf "Do you want to continue? (y/N): "
+        read -r REPLY </dev/tty
+        echo  # Add newline after user input
         case $REPLY in
-            [Yy]*) break ;;
-            [Nn]*|"") echo "Installation cancelled."; exit 0 ;;
-            *) echo "Please answer yes or no." ;;
+            [Yy]*) 
+                echo "Proceeding with installation..."
+                break 
+                ;;
+            [Nn]*|"") 
+                echo "Installation cancelled."
+                exit 0 
+                ;;
+            *) 
+                echo "Please answer yes (y) or no (n)." 
+                ;;
         esac
     done
     
@@ -245,6 +264,7 @@ is_phase_completed() {
 main() {
     # Initialize
     check_root
+    check_interactive
     check_system
     create_directories
     show_welcome
