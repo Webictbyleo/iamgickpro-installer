@@ -225,26 +225,18 @@ install_ffmpeg() {
     # Download latest FFmpeg source
     print_step "Downloading FFmpeg source"
     
-    # Get the latest release version
-    FFMPEG_VERSION=$(curl -s https://api.github.com/repos/FFmpeg/FFmpeg/releases/latest | grep -oP '"tag_name": "n\K(.*)(?=")')
+    # Use the reliable snapshot source
+    print_step "Using FFmpeg snapshot from ffmpeg.org"
     
-    if [[ -z "$FFMPEG_VERSION" ]]; then
-        # Fallback to a known working version
-        FFMPEG_VERSION="6.1.1"
-        print_warning "Could not fetch latest version, using fallback: $FFMPEG_VERSION"
-    else
-        print_success "Using latest FFmpeg version: $FFMPEG_VERSION"
-    fi
-    
-    wget -q "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" -O ffmpeg.tar.xz
+    wget -q "http://ffmpeg.org/releases/ffmpeg-snapshot.tar.bz2" -O ffmpeg-snapshot.tar.bz2
     
     if [[ $? -ne 0 ]]; then
         print_error "Failed to download FFmpeg source"
         return 1
     fi
     
-    tar xf ffmpeg.tar.xz
-    cd "ffmpeg-${FFMPEG_VERSION}"
+    tar xf ffmpeg-snapshot.tar.bz2
+    cd ffmpeg
     
     # Configure FFmpeg build
     print_step "Configuring FFmpeg build"
@@ -269,7 +261,7 @@ install_ffmpeg() {
         --enable-libwebp \
         --enable-pic \
         --extra-libs=-lpthread \
-        --extra-libs=-lm &> /dev/null
+        --extra-libs=-lm
     
     if [[ $? -ne 0 ]]; then
         print_error "FFmpeg configuration failed"
@@ -306,7 +298,7 @@ install_ffmpeg() {
     # Verify installation
     if command -v ffmpeg &> /dev/null; then
         FFMPEG_INSTALLED_VERSION=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}')
-        print_success "FFmpeg $FFMPEG_INSTALLED_VERSION installed successfully"
+        print_success "FFmpeg $FFMPEG_INSTALLED_VERSION installed successfully from snapshot"
     else
         print_error "FFmpeg installation verification failed"
         return 1

@@ -141,6 +141,9 @@ import_content() {
     # Set environment variable for database connection
     export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME"
     
+    # Set backend directory for the importer script
+    export BACKEND_DIR="$backend_dir"
+    
     # Run template import with production settings
     print_step "Running template import"
     
@@ -153,7 +156,8 @@ import_content() {
     # Run the template import with timeout and better error handling
     print_step "Starting template import (this may take several minutes)"
     print_step "Database URL: mysql://$DB_USER:***@$DB_HOST:$DB_PORT/$DB_NAME"
-    timeout 600 node advanced-template-importer.js --limit 50 --force
+    print_step "Backend directory: $backend_dir"
+    timeout 600 node advanced-template-importer.js --limit 50 --force --backend-dir="$backend_dir"
     import_exit_code=$?
     
     if [[ $import_exit_code -eq 124 ]]; then
@@ -206,7 +210,8 @@ php bin/console app:shapes:import --force --env=prod
 echo "Updating templates..."
 cd "$scripts_dir"
 export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME"
-node advanced-template-importer.js --clear-existing --limit 100
+export BACKEND_DIR="$backend_dir"
+node advanced-template-importer.js --clear-existing --limit 100 --backend-dir="$backend_dir"
 
 echo "Content update completed"
 EOF
