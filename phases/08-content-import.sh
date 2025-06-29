@@ -93,7 +93,7 @@ import_content() {
         else
             # Run npm install with timeout and error handling
             print_step "Installing Node.js dependencies (this may take a few minutes)"
-            timeout 300 npm install 2>&1
+             npm install 2>&1
             npm_exit_code=$?
             
             if [[ $npm_exit_code -eq 124 ]]; then
