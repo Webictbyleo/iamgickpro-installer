@@ -278,16 +278,40 @@ install_ffmpeg() {
     
     print_step "Installing FFmpeg from source"
     
-    # Check if FFmpeg is already installed and version >= 6
+    # Check if FFmpeg is already installed with required features
     if command -v ffmpeg &> /dev/null; then
-        local current_version=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}' | cut -d'.' -f1 2>/dev/null || echo "0")
-        # Validate version is numeric and check if >= 6
-        if [[ "$current_version" =~ ^[0-9]+$ ]] && [[ "$current_version" -ge 6 ]]; then
-            local full_version=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}' 2>/dev/null || echo "unknown")
-            print_success "FFmpeg $full_version (>= 6.x) already installed - skipping compilation"
+        local ffmpeg_info=$(ffmpeg -version 2>&1)
+        local version_line=$(echo "$ffmpeg_info" | head -n1)
+        local has_required_libs=true
+        
+        # Check for required libraries in the version output
+        local required_libs=("libx264" "libx265" "libvpx" "libwebp" "libmp3lame" "libopus" "libvorbis")
+        local missing_libs=""
+        
+        for lib in "${required_libs[@]}"; do
+            if ! echo "$ffmpeg_info" | grep -q "$lib"; then
+                has_required_libs=false
+                missing_libs+="$lib "
+            fi
+        done
+        
+        # Also check if it's a recent build (has libavutil version >= 58)
+        local libavutil_version=$(echo "$ffmpeg_info" | grep "libavutil" | awk '{print $2}' | cut -d'.' -f1)
+        local version_ok=false
+        
+        if [[ "$libavutil_version" =~ ^[0-9]+$ ]] && [[ "$libavutil_version" -ge 58 ]]; then
+            version_ok=true
+        fi
+        
+        if [[ "$has_required_libs" == true ]] && [[ "$version_ok" == true ]]; then
+            local version_display=$(echo "$version_line" | awk '{print $3}')
+            print_success "FFmpeg $version_display with required libraries already installed - skipping compilation"
             return 0
         else
-            print_step "FFmpeg found but version < 6.x - will upgrade"
+            local issues=""
+            [[ "$version_ok" == false ]] && issues+="old_version "
+            [[ "$has_required_libs" == false ]] && issues+="missing_libs($missing_libs) "
+            print_step "FFmpeg found but has issues: $issues- will reinstall"
         fi
     fi
     

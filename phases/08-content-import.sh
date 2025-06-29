@@ -92,10 +92,8 @@ import_content() {
     # Navigate to scripts directory
     cd "$scripts_dir"
     
-    # Install Node.js dependencies for the importer
+    # Check and install Node.js dependencies for the importer if needed
     if [[ -f "package.json" ]]; then
-        print_step "Installing template importer dependencies"
-        
         # Check Node.js version
         CURRENT_NODE_VERSION=$(node --version 2>/dev/null || echo "not found")
         CURRENT_NODE_MAJOR=$(echo "$CURRENT_NODE_VERSION" | sed 's/v//' | cut -d. -f1)
@@ -119,21 +117,33 @@ import_content() {
             fi
         fi
         
+        # Smart dependency installation - only install if needed
+        local need_install=false
         
-        
-        # Check if node_modules already exists
-        if [[ -d "node_modules" ]]; then
-            print_step "Dependencies already installed, skipping npm install"
+        # Check if node_modules exists and has content
+        if [[ ! -d "node_modules" ]] || [[ -z "$(ls -A node_modules 2>/dev/null)" ]]; then
+            need_install=true
+            print_step "Node.js dependencies not found - will install"
+        # Check if package.json is newer than node_modules
+        elif [[ "package.json" -nt "node_modules" ]]; then
+            need_install=true
+            print_step "package.json updated - will reinstall dependencies"
+        # Check if package-lock.json exists but node_modules doesn't match
+        elif [[ -f "package-lock.json" ]] && [[ "package-lock.json" -nt "node_modules" ]]; then
+            need_install=true
+            print_step "package-lock.json updated - will reinstall dependencies"
         else
-            # Run npm install with timeout and error handling
-            print_step "Installing Node.js dependencies (this may take a few minutes)"
+            print_step "Node.js dependencies already up to date - skipping install"
+        fi
+        
+        if [[ "$need_install" == true ]]; then
+            print_step "Installing template importer dependencies (this may take a few minutes)"
             print_step "Working directory: $(pwd)"
-            print_step "Running: npm install"
             
             # Clear npm cache first to avoid issues
             npm cache clean --force 2>/dev/null || true
             
-            # Run npm install without output redirection to see real-time output
+            # Run npm install with timeout and error handling
             timeout 600 npm install
             npm_exit_code=$?
             
@@ -144,7 +154,7 @@ import_content() {
                 print_warning "npm install failed (exit code: $npm_exit_code)"
                 print_step "Attempting to continue anyway - some features may not work"
             else
-                print_success "Template importer dependencies installed"
+                print_success "Template importer dependencies installed successfully"
             fi
         fi
     else
