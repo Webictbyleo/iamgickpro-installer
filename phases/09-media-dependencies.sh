@@ -40,6 +40,9 @@ install_media_dependencies() {
         libfontconfig1-dev \
         libxml2-dev \
         libgomp1 \
+        librsvg2-dev \
+        libcairo2-dev \
+        libpango1.0-dev \
         wget \
         curl
     
@@ -65,6 +68,56 @@ install_imagemagick() {
     local build_dir="$1"
     
     print_step "Installing ImageMagick from source"
+    
+    # Check if ImageMagick is already installed with required features
+    if command -v convert &> /dev/null; then
+        local current_version=$(convert -version | head -n1 | awk '{print $3}' | cut -d'.' -f1)
+        
+        # Check for required features
+        local has_svg=false
+        local has_webp=false
+        local has_jpeg=false
+        local has_png=false
+        local version_ok=false
+        
+        if [[ -n "$current_version" ]] && [[ "$current_version" -ge 7 ]]; then
+            version_ok=true
+        fi
+        
+        # Check for SVG support
+        if convert -list format | grep -q "SVG.*rw"; then
+            has_svg=true
+        fi
+        
+        # Check for WebP support
+        if convert -list format | grep -q "WEBP.*rw"; then
+            has_webp=true
+        fi
+        
+        # Check for JPEG support
+        if convert -list format | grep -q "JPEG.*rw"; then
+            has_jpeg=true
+        fi
+        
+        # Check for PNG support
+        if convert -list format | grep -q "PNG.*rw"; then
+            has_png=true
+        fi
+        
+        if [[ "$version_ok" == true ]] && [[ "$has_svg" == true ]] && [[ "$has_webp" == true ]] && [[ "$has_jpeg" == true ]] && [[ "$has_png" == true ]]; then
+            local full_version=$(convert -version | head -n1 | awk '{print $3}')
+            print_success "ImageMagick $full_version with required features (SVG, WebP, JPEG, PNG) already installed - skipping compilation"
+            return 0
+        else
+            local missing_features=""
+            [[ "$version_ok" == false ]] && missing_features+="version<7 "
+            [[ "$has_svg" == false ]] && missing_features+="SVG "
+            [[ "$has_webp" == false ]] && missing_features+="WebP "
+            [[ "$has_jpeg" == false ]] && missing_features+="JPEG "
+            [[ "$has_png" == false ]] && missing_features+="PNG "
+            print_step "ImageMagick found but missing features: $missing_features- will reinstall"
+        fi
+    fi
     
     cd "$build_dir"
     
@@ -112,6 +165,9 @@ install_imagemagick() {
         --with-freetype \
         --with-fontconfig \
         --with-xml \
+        --with-rsvg \
+        --with-cairo \
+        --with-pango \
         --enable-hdri &> /dev/null
     
     if [[ $? -ne 0 ]]; then
@@ -219,6 +275,18 @@ install_ffmpeg() {
     local build_dir="$1"
     
     print_step "Installing FFmpeg from source"
+    
+    # Check if FFmpeg is already installed and version >= 6
+    if command -v ffmpeg &> /dev/null; then
+        local current_version=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}' | cut -d'.' -f1)
+        if [[ -n "$current_version" ]] && [[ "$current_version" -ge 6 ]]; then
+            local full_version=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}')
+            print_success "FFmpeg $full_version (>= 6.x) already installed - skipping compilation"
+            return 0
+        else
+            print_step "FFmpeg found but version < 6.x - will upgrade"
+        fi
+    fi
     
     cd "$build_dir"
     

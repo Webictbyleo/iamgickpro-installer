@@ -157,7 +157,7 @@ import_content() {
     print_step "Starting template import (this may take several minutes)"
     print_step "Database URL: mysql://$DB_USER:***@$DB_HOST:$DB_PORT/$DB_NAME"
     print_step "Backend directory: $backend_dir"
-    timeout 600 node advanced-template-importer.js --limit 50 --force --backend-dir="$backend_dir"
+    timeout 600 node advanced-template-importer.js --limit 50 --force --clear-existing --backend-dir="$backend_dir"
     import_exit_code=$?
     
     if [[ $import_exit_code -eq 124 ]]; then
@@ -184,8 +184,8 @@ import_content() {
     # Set up content directories and permissions
     print_step "Setting up content directories"
     
-    mkdir -p public/uploads/templates/thumbnails
-    mkdir -p public/uploads/templates/previews
+    mkdir -p public/uploads/templates
+    mkdir -p public/uploads/thumbnails
     mkdir -p public/uploads/shapes
     mkdir -p public/uploads/media
     
