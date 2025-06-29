@@ -71,7 +71,7 @@ install_imagemagick() {
     
     # Check if ImageMagick is already installed with required features
     if command -v convert &> /dev/null; then
-        local current_version=$(convert -version | head -n1 | awk '{print $3}' | cut -d'.' -f1)
+        local current_version=$(convert -version | head -n1 | awk '{print $3}' | cut -d'.' -f1 2>/dev/null || echo "0")
         
         # Check for required features
         local has_svg=false
@@ -80,7 +80,8 @@ install_imagemagick() {
         local has_png=false
         local version_ok=false
         
-        if [[ -n "$current_version" ]] && [[ "$current_version" -ge 7 ]]; then
+        # Validate version is numeric and check if >= 7
+        if [[ "$current_version" =~ ^[0-9]+$ ]] && [[ "$current_version" -ge 7 ]]; then
             version_ok=true
         fi
         
@@ -280,7 +281,8 @@ install_ffmpeg() {
     # Check if FFmpeg is already installed and version >= 6
     if command -v ffmpeg &> /dev/null; then
         local current_version=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}' | cut -d'.' -f1 2>/dev/null || echo "0")
-        if [[ -n "$current_version" ]] && [[ "$current_version" -ge 6 ]]; then
+        # Validate version is numeric and check if >= 6
+        if [[ "$current_version" =~ ^[0-9]+$ ]] && [[ "$current_version" -ge 6 ]]; then
             local full_version=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}' 2>/dev/null || echo "unknown")
             print_success "FFmpeg $full_version (>= 6.x) already installed - skipping compilation"
             return 0
