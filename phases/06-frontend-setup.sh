@@ -243,16 +243,28 @@ server {
     location /api/ {
         root $INSTALL_DIR/backend/public;
         try_files \$uri /index.php\$is_args\$args;
-        
-        # Handle PHP files in API
-        location ~ \.php$ {
-            fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
-            fastcgi_index index.php;
-            include fastcgi_params;
-            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-            fastcgi_param HTTPS off;
-        }
     }
+
+    # Handle PHP files in API
+        location ~ \.php$ {
+			root $INSTALL_DIR/backend/public;
+			include snippets/fastcgi-php.conf; # Recommended for including standard params
+            # Or manually specify them as you have, but ensure the SCRIPT_FILENAME is correct
+		fastcgi_split_path_info ^(.+?\.php)(/.*)$;
+		fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+		fastcgi_param SCRIPT_FILENAME $$document_root$fastcgi_script_name;
+		fastcgi_param PATH_INFO $$fastcgi_path_info;
+		
+		# Security and timeouts
+		fastcgi_hide_header X-Powered-By;
+		fastcgi_read_timeout 300s;
+		fastcgi_send_timeout 300s;
+		fastcgi_connect_timeout 60s;
+		fastcgi_buffer_size 128k;
+		fastcgi_buffers 4 256k;
+		fastcgi_busy_buffers_size 256k;
+			
+        }
 
     # Media file routes (serve from backend)
     location /media/ {
@@ -291,14 +303,6 @@ server {
         root $INSTALL_DIR/backend/public;
         try_files \$uri /index.php\$is_args\$args;
         
-        # Handle PHP files for security checks
-        location ~ \.php$ {
-            fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
-            fastcgi_index index.php;
-            include fastcgi_params;
-            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-            fastcgi_param HTTPS off;
-        }
     }
 
     # Static assets caching (must be before frontend routes)
