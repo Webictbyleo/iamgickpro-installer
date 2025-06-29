@@ -288,6 +288,7 @@ install_ffmpeg() {
             print_step "FFmpeg found but version < 6.x - will upgrade"
         fi
     fi
+    fi
     
     cd "$build_dir"
     
