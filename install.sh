@@ -57,7 +57,10 @@ UNSPLASH_API_KEY=""
 PEXELS_API_KEY=""
 INSTALL_IMAGEMAGICK=true  # Required for image processing
 INSTALL_FFMPEG=true       # Required for video processing
-NODE_VERSION="22"         # Current LTS version
+NODE_VERSION="21"         # LTS version used throughout the project
+
+# Frontend change detection
+FRONTEND_CHANGED=true     # Default to true for safety (build frontend if unsure)
 
 # Phase tracking
 declare -a COMPLETED_PHASES=()

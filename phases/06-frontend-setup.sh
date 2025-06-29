@@ -15,6 +15,29 @@ setup_frontend() {
         return 1
     fi
     
+    # Check if frontend build is needed based on change detection
+    if [[ "${FRONTEND_CHANGED:-true}" == "false" ]]; then
+        print_step "Frontend unchanged - skipping build and using existing files"
+        
+        # Verify that existing frontend files are present
+        if [[ -f "$webroot/index.html" ]] && [[ -d "$webroot/assets" ]]; then
+            print_success "Existing frontend files verified - build skipped"
+            
+            # Still update the hash cache in case repository was updated
+            cd "$frontend_source/.."
+            source "$SCRIPT_DIR/phases/03-clone-repository.sh"
+            update_frontend_hash
+            cd - > /dev/null
+            
+            return 0
+        else
+            print_warning "Frontend marked as unchanged but missing files detected - forcing build"
+            FRONTEND_CHANGED=true
+        fi
+    fi
+    
+    print_step "Frontend changes detected - proceeding with build"
+    
     # Install Node.js if not available or wrong version
     print_step "Checking Node.js installation"
     
@@ -358,6 +381,13 @@ EOF
     fi
     
     print_success "Frontend setup completed"
+    
+    # Update frontend hash cache after successful build
+    print_step "Updating frontend change detection cache"
+    cd "$frontend_source/.."
+    source "$SCRIPT_DIR/phases/03-clone-repository.sh"
+    update_frontend_hash
+    cd - > /dev/null
     
     # Cleanup temporary build directory
     print_step "Cleaning up build files"

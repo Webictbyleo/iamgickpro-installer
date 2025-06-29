@@ -12,7 +12,6 @@ install_media_dependencies() {
     # Install build dependencies
     print_step "Installing build dependencies"
     
-    apt-get update -qq
     apt-get install -y \
         build-essential \
         cmake \
@@ -42,7 +41,7 @@ install_media_dependencies() {
         libxml2-dev \
         libgomp1 \
         wget \
-        curl &> /dev/null
+        curl
     
     print_success "Build dependencies installed"
     
