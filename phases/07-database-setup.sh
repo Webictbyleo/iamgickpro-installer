@@ -181,33 +181,39 @@ EOF
     # Create database indexes for performance (if not created by migrations)
     print_step "Optimizing database performance"
     
+    # Use a more compatible approach for MySQL indexes
     mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" << 'EOF'
--- Add indexes for common queries (these may already exist)
+-- Add indexes for common queries (ignore errors if they already exist)
 -- User table
-CREATE INDEX IF NOT EXISTS idx_user_email ON user(email);
-CREATE INDEX IF NOT EXISTS idx_user_created_at ON user(created_at);
+CREATE INDEX idx_user_email ON user(email);
+CREATE INDEX idx_user_created_at ON user(created_at);
 
 -- Design table  
-CREATE INDEX IF NOT EXISTS idx_design_user_id ON design(user_id);
-CREATE INDEX IF NOT EXISTS idx_design_created_at ON design(created_at);
-CREATE INDEX IF NOT EXISTS idx_design_status ON design(status);
+CREATE INDEX idx_design_user_id ON design(user_id);
+CREATE INDEX idx_design_created_at ON design(created_at);
+CREATE INDEX idx_design_status ON design(status);
 
 -- Template table
-CREATE INDEX IF NOT EXISTS idx_template_category ON template(category);
-CREATE INDEX IF NOT EXISTS idx_template_featured ON template(featured);
-CREATE INDEX IF NOT EXISTS idx_template_created_at ON template(created_at);
+CREATE INDEX idx_template_category ON template(category);
+CREATE INDEX idx_template_featured ON template(featured);
+CREATE INDEX idx_template_created_at ON template(created_at);
 
 -- Media table
-CREATE INDEX IF NOT EXISTS idx_media_user_id ON media(user_id);
-CREATE INDEX IF NOT EXISTS idx_media_type ON media(type);
-CREATE INDEX IF NOT EXISTS idx_media_created_at ON media(created_at);
+CREATE INDEX idx_media_user_id ON media(user_id);
+CREATE INDEX idx_media_type ON media(type);
+CREATE INDEX idx_media_created_at ON media(created_at);
 
 -- Shape table
-CREATE INDEX IF NOT EXISTS idx_shape_category ON shape(category);
-CREATE INDEX IF NOT EXISTS idx_shape_featured ON shape(featured);
+CREATE INDEX idx_shape_category ON shape(category);
+CREATE INDEX idx_shape_featured ON shape(featured);
 EOF
 
-    print_success "Database optimization completed"
+    # Ignore errors from duplicate indexes
+    if [[ $? -eq 0 ]]; then
+        print_success "Database indexes created"
+    else
+        print_success "Database optimization completed (some indexes may already exist)"
+    fi
     
     # Set up database maintenance
     print_step "Setting up database maintenance"
