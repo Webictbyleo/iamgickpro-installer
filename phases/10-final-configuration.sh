@@ -14,46 +14,25 @@ final_configuration() {
     print_step "Creating admin user account"
     
     # Check if admin user already exists
-    ADMIN_EXISTS=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -se "SELECT COUNT(*) FROM user WHERE email='$ADMIN_EMAIL';")
+    ADMIN_EXISTS=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -se "SELECT COUNT(*) FROM users WHERE email='$ADMIN_EMAIL';")
     
     if [[ $ADMIN_EXISTS -eq 0 ]]; then
-        # Create admin user using Symfony console command
-        php bin/console app:user:create \
+        # Create admin user using the correct admin creation command
+        print_step "Creating admin user: $ADMIN_EMAIL"
+        
+        php bin/console app:create-admin \
             --email="$ADMIN_EMAIL" \
             --password="$ADMIN_PASSWORD" \
-            --role="ROLE_ADMIN" \
-            --first-name="Admin" \
-            --last-name="User" \
-            --env=prod &> /dev/null
+            --first-name="$ADMIN_FIRST_NAME" \
+            --last-name="$ADMIN_LAST_NAME" \
+            --username="admin" \
+            --env=prod
         
         if [[ $? -eq 0 ]]; then
             print_success "Admin user created: $ADMIN_EMAIL"
         else
-            # Fallback: Create admin user via direct database insertion
-            print_step "Creating admin user via database"
-            
-            # Generate password hash
-            HASHED_PASSWORD=$(php -r "echo password_hash('$ADMIN_PASSWORD', PASSWORD_DEFAULT);")
-            
-            mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" << EOF
-INSERT INTO user (email, password, roles, first_name, last_name, created_at, updated_at) 
-VALUES (
-    '$ADMIN_EMAIL',
-    '$HASHED_PASSWORD', 
-    '["ROLE_ADMIN", "ROLE_USER"]',
-    'Admin',
-    'User',
-    NOW(),
-    NOW()
-);
-EOF
-            
-            if [[ $? -eq 0 ]]; then
-                print_success "Admin user created via database: $ADMIN_EMAIL"
-            else
-                print_error "Failed to create admin user"
-                return 1
-            fi
+            print_error "Failed to create admin user"
+            return 1
         fi
     else
         print_success "Admin user already exists: $ADMIN_EMAIL"
@@ -104,50 +83,9 @@ EOF
         print_warning "No firewall detected - please configure manually"
     fi
     
-    # Create system monitoring script
-    print_step "Setting up system monitoring"
+    # Create log rotation configuration
+    print_step "Configuring log rotation"
     
-    cat > /usr/local/bin/iamgickpro-status << EOF
-#!/bin/bash
-# IAMGickPro System Status Script
-
-echo "=== IAMGickPro System Status ==="
-echo "Date: \$(date)"
-echo
-
-echo "=== Services ==="
-systemctl is-active --quiet nginx && echo "✓ Nginx: Running" || echo "✗ Nginx: Stopped"
-systemctl is-active --quiet mysql && echo "✓ MySQL: Running" || echo "✗ MySQL: Stopped"
-systemctl is-active --quiet php8.4-fpm && echo "✓ PHP-FPM: Running" || echo "✗ PHP-FPM: Stopped"
-systemctl is-active --quiet redis-server && echo "✓ Redis: Running" || echo "✗ Redis: Stopped"
-systemctl is-active --quiet iamgickpro-worker && echo "✓ Background Worker: Running" || echo "✗ Background Worker: Stopped"
-echo
-
-echo "=== Database ==="
-mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -se "SELECT COUNT(*) AS users FROM user;" 2>/dev/null && echo "✓ Database: Connected" || echo "✗ Database: Connection failed"
-echo
-
-echo "=== Disk Usage ==="
-df -h "$INSTALL_DIR" | tail -1 | awk '{print "Application: " \$3 " used of " \$2 " (" \$5 " full)"}'
-echo
-
-echo "=== Memory Usage ==="
-free -h | grep "Mem:" | awk '{print "Memory: " \$3 " used of " \$2}'
-echo
-
-echo "=== Web Status ==="
-curl -s -o /dev/null -w "HTTP Status: %{http_code}" "http://localhost" 2>/dev/null || echo "Web server: Not responding"
-echo
-EOF
-
-    chmod +x /usr/local/bin/iamgickpro-status
-    
-    print_success "System monitoring configured"
-    
-    # Create maintenance scripts
-    print_step "Creating maintenance tools"
-    
-    # Log rotation script
     cat > /etc/logrotate.d/iamgickpro << EOF
 $backend_dir/var/log/*.log {
     daily
@@ -172,59 +110,6 @@ $backend_dir/var/log/*.log {
 EOF
 
     print_success "Log rotation configured"
-    
-    # Create update script
-    cat > /usr/local/bin/iamgickpro-update << EOF
-#!/bin/bash
-# IAMGickPro Update Script
-
-set -e
-
-BACKUP_DIR="/var/backups/iamgickpro/updates"
-INSTALL_DIR="$INSTALL_DIR"
-TEMP_DIR="/tmp/iamgickpro-update"
-
-echo "=== IAMGickPro Update Script ==="
-echo "Starting update process..."
-
-# Create backup
-echo "Creating backup..."
-mkdir -p "\$BACKUP_DIR"
-tar -czf "\$BACKUP_DIR/backup-\$(date +%Y%m%d_%H%M%S).tar.gz" -C "\$INSTALL_DIR" .
-
-# Clone latest version
-echo "Downloading latest version..."
-rm -rf "\$TEMP_DIR"
-git clone https://github.com/Webictbyleo/iamgickpro.git "\$TEMP_DIR"
-
-# Update backend
-echo "Updating backend..."
-cd "\$INSTALL_DIR/backend"
-cp .env.local "\$TEMP_DIR/backend/.env.local"
-rsync -av --exclude=var/ --exclude=vendor/ --exclude=.env* "\$TEMP_DIR/backend/" .
-composer install --no-dev --optimize-autoloader --no-interaction
-php bin/console cache:clear --env=prod
-php bin/console doctrine:migrations:migrate --no-interaction --env=prod
-
-# Update frontend
-echo "Updating frontend..."
-cd "\$TEMP_DIR/frontend"
-npm ci --production
-npm run build
-rsync -av dist/ "\$INSTALL_DIR/public/"
-
-# Restart services
-echo "Restarting services..."
-systemctl restart php8.4-fpm
-systemctl restart nginx
-systemctl restart iamgickpro-worker
-
-echo "Update completed successfully!"
-EOF
-
-    chmod +x /usr/local/bin/iamgickpro-update
-    
-    print_success "Update tools created"
     
     # Run final system optimization
     print_step "Running system optimization"
@@ -279,16 +164,9 @@ Installed Components:
 ✓ IAMGickPro Application
 ✓ Background Worker Service
 
-Useful Commands:
-- System Status: iamgickpro-status
-- Update Application: iamgickpro-update
-- Update Content: iamgickpro-update-content
-- Backup Database: iamgickpro-backup
-- View Logs: tail -f $backend_dir/var/log/prod.log
-
 Configuration Files:
 - Nginx: /etc/nginx/sites-available/iamgickpro
-- Backend Config: $backend_dir/.env.local
+- Backend Config: $backend_dir/.env
 
 Next Steps:
 1. Configure SSL certificates (recommended: certbot --nginx)
@@ -302,9 +180,6 @@ Installation completed successfully!
 EOF
 
     print_success "Installation summary generated: /root/iamgickpro-installation-summary.txt"
-    
-    # Cleanup temporary files
-    print_step "Cleaning up temporary files"
     
     rm -rf "$TEMP_DIR"
     apt-get autoremove -y &> /dev/null

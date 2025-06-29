@@ -19,6 +19,7 @@ check_cached_config() {
         echo -e "${CYAN}Database:${NC} ${DB_NAME:-'(not set)'} @ ${DB_HOST:-'localhost'}:${DB_PORT:-'3306'}"
         echo -e "${CYAN}Database User:${NC} ${DB_USER:-'(not set)'}"
         echo -e "${CYAN}Admin Email:${NC} ${ADMIN_EMAIL:-'(not set)'}"
+        echo -e "${CYAN}Admin Name:${NC} ${ADMIN_FIRST_NAME:-'(not set)'} ${ADMIN_LAST_NAME:-'(not set)'}"
         echo -e "${CYAN}App Name:${NC} ${APP_NAME:-'IAMGickPro'}"
         echo -e "${CYAN}Node.js:${NC} ${NODE_VERSION:-'21'}"
         echo -e "${CYAN}Last Updated:${NC} $(date -r "$cached_config" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo 'unknown')"
@@ -70,6 +71,8 @@ DB_PASSWORD="$DB_PASSWORD"
 MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD"
 ADMIN_EMAIL="$ADMIN_EMAIL"
 ADMIN_PASSWORD="$ADMIN_PASSWORD"
+ADMIN_FIRST_NAME="$ADMIN_FIRST_NAME"
+ADMIN_LAST_NAME="$ADMIN_LAST_NAME"
 APP_NAME="$APP_NAME"
 MAIL_FROM_ADDRESS="$MAIL_FROM_ADDRESS"
 FRONTEND_URL="$FRONTEND_URL"
@@ -193,6 +196,22 @@ collect_user_input() {
         if [[ ${#ADMIN_PASSWORD} -lt 8 ]]; then
             print_warning "Password must be at least 8 characters long"
             ADMIN_PASSWORD=""
+        fi
+    done
+    
+    while [[ -z "$ADMIN_FIRST_NAME" ]]; do
+        printf "Admin first name: "
+        read -r ADMIN_FIRST_NAME </dev/tty
+        if [[ -z "$ADMIN_FIRST_NAME" ]]; then
+            print_warning "First name cannot be empty"
+        fi
+    done
+    
+    while [[ -z "$ADMIN_LAST_NAME" ]]; do
+        printf "Admin last name: "
+        read -r ADMIN_LAST_NAME </dev/tty
+        if [[ -z "$ADMIN_LAST_NAME" ]]; then
+            print_warning "Last name cannot be empty"
         fi
     done
     
