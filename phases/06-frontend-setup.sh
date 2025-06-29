@@ -194,28 +194,22 @@ server {
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
-    gzip_proxied expired no-cache no-store private must-revalidate auth;
+    gzip_proxied any;
     gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
 
-    # API routes (proxy to backend)
+    # API routes (backend processing)
     location /api/ {
-        try_files \$uri @backend;
-    }
-
-    # Backend PHP processing
-    location @backend {
         root $INSTALL_DIR/backend/public;
         try_files \$uri /index.php\$is_args\$args;
-    }
-
-    # PHP-FPM processing for API endpoints
-    location ~ ^/api/.*\.php$ {
-        root $INSTALL_DIR/backend/public;
-        fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
-        fastcgi_index index.php;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        fastcgi_param HTTPS off;
+        
+        # Handle PHP files in API
+        location ~ \.php$ {
+            fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
+            fastcgi_index index.php;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+            fastcgi_param HTTPS off;
+        }
     }
 
     # Media file routes (serve from backend)
@@ -223,7 +217,7 @@ server {
         alias $INSTALL_DIR/backend/public/media/;
         expires 1y;
         add_header Cache-Control "public, immutable";
-        try_files \$uri @backend;
+        try_files \$uri =404;
     }
 
     # Upload file routes (serve from backend)
@@ -231,7 +225,7 @@ server {
         alias $INSTALL_DIR/backend/public/uploads/;
         expires 1y;
         add_header Cache-Control "public, immutable";
-        try_files \$uri @backend;
+        try_files \$uri =404;
     }
 
     # Storage file routes (serve from backend)
@@ -239,7 +233,7 @@ server {
         alias $INSTALL_DIR/backend/public/storage/;
         expires 1y;
         add_header Cache-Control "public, immutable";
-        try_files \$uri @backend;
+        try_files \$uri =404;
     }
 
     # Thumbnail routes (serve from backend)
@@ -247,24 +241,26 @@ server {
         alias $INSTALL_DIR/backend/public/thumbnails/;
         expires 1y;
         add_header Cache-Control "public, immutable";
-        try_files \$uri @backend;
+        try_files \$uri =404;
     }
 
-    # Secure media routes (serve from backend)
+    # Secure media routes (serve from backend with security checks)
     location /secure-media/ {
-        # This should go through backend for security checks
-        try_files \$uri @backend;
+        root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
+    }
+
+    # Static assets caching (must be before frontend routes)
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
     }
 
     # Frontend routes (SPA) - must be last to catch all remaining routes
     location / {
+        root $webroot/frontend/dist;
         try_files \$uri \$uri/ /index.html;
-    }
-
-    # Static assets caching
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
     }
 
     # Security: deny access to sensitive files
