@@ -11,7 +11,8 @@ collect_user_input() {
     
     # Domain name
     while [[ -z "$DOMAIN_NAME" ]]; do
-        read -p "Domain name (e.g., mydesignstudio.com): " DOMAIN_NAME
+        printf "Domain name (e.g., mydesignstudio.com): "
+        read -r DOMAIN_NAME </dev/tty
         if [[ -z "$DOMAIN_NAME" ]]; then
             print_warning "Domain name is required"
         fi
@@ -23,17 +24,20 @@ collect_user_input() {
     echo -e "${CYAN}Database Configuration:${NC}"
     
     while [[ -z "$DB_NAME" ]]; do
-        read -p "Database name [iamgickpro]: " DB_NAME
+        printf "Database name [iamgickpro]: "
+        read -r DB_NAME </dev/tty
         DB_NAME=${DB_NAME:-iamgickpro}
     done
     
     while [[ -z "$DB_USER" ]]; do
-        read -p "Database username [iamgickpro]: " DB_USER
+        printf "Database username [iamgickpro]: "
+        read -r DB_USER </dev/tty
         DB_USER=${DB_USER:-iamgickpro}
     done
     
     while [[ -z "$DB_PASSWORD" ]]; do
-        read -s -p "Database password: " DB_PASSWORD
+        printf "Database password: "
+        read -sr DB_PASSWORD </dev/tty
         echo
         if [[ -z "$DB_PASSWORD" ]]; then
             print_warning "Database password is required"
@@ -42,7 +46,8 @@ collect_user_input() {
     
     # MySQL root password (for database creation)
     while [[ -z "$MYSQL_ROOT_PASSWORD" ]]; do
-        read -s -p "MySQL root password: " MYSQL_ROOT_PASSWORD
+        printf "MySQL root password: "
+        read -sr MYSQL_ROOT_PASSWORD </dev/tty
         echo
         if [[ -z "$MYSQL_ROOT_PASSWORD" ]]; then
             print_warning "MySQL root password is required for database creation"
@@ -50,10 +55,12 @@ collect_user_input() {
     done
     
     # Advanced database settings
-    read -p "Database host [$DB_HOST]: " input
+    printf "Database host [$DB_HOST]: "
+    read -r input </dev/tty
     DB_HOST=${input:-$DB_HOST}
     
-    read -p "Database port [$DB_PORT]: " input
+    printf "Database port [$DB_PORT]: "
+    read -r input </dev/tty
     DB_PORT=${input:-$DB_PORT}
     
     # Admin account
@@ -61,7 +68,8 @@ collect_user_input() {
     echo -e "${CYAN}Admin Account:${NC}"
     
     while [[ -z "$ADMIN_EMAIL" ]]; do
-        read -p "Admin email: " ADMIN_EMAIL
+        printf "Admin email: "
+        read -r ADMIN_EMAIL </dev/tty
         if [[ ! "$ADMIN_EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
             print_warning "Please enter a valid email address"
             ADMIN_EMAIL=""
@@ -69,7 +77,8 @@ collect_user_input() {
     done
     
     while [[ -z "$ADMIN_PASSWORD" ]]; do
-        read -s -p "Admin password (min 8 characters): " ADMIN_PASSWORD
+        printf "Admin password (min 8 characters): "
+        read -sr ADMIN_PASSWORD </dev/tty
         echo
         if [[ ${#ADMIN_PASSWORD} -lt 8 ]]; then
             print_warning "Password must be at least 8 characters long"
@@ -81,34 +90,41 @@ collect_user_input() {
     echo
     echo -e "${CYAN}Application Settings:${NC}"
     
-    read -p "Application name [$APP_NAME]: " input
+    printf "Application name [$APP_NAME]: "
+    read -r input </dev/tty
     APP_NAME=${input:-$APP_NAME}
     
-    read -p "Mail from address [$ADMIN_EMAIL]: " MAIL_FROM_ADDRESS
+    printf "Mail from address [$ADMIN_EMAIL]: "
+    read -r MAIL_FROM_ADDRESS </dev/tty
     MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-$ADMIN_EMAIL}
     
     # External API keys (optional)
     echo
     echo -e "${CYAN}External Services (Optional):${NC}"
     
-    read -p "Unsplash API key (for stock photos): " UNSPLASH_API_KEY
-    read -p "Pexels API key (for stock photos): " PEXELS_API_KEY
+    printf "Unsplash API key (for stock photos): "
+    read -r UNSPLASH_API_KEY </dev/tty
+    printf "Pexels API key (for stock photos): "
+    read -r PEXELS_API_KEY </dev/tty
     
     # Installation options
     echo
     echo -e "${CYAN}Installation Options:${NC}"
     
-    read -p "Install ImageMagick from source? (Y/n): " -r
+    printf "Install ImageMagick from source? (Y/n): "
+    read -r REPLY </dev/tty
     if [[ $REPLY =~ ^[Nn]$ ]]; then
         INSTALL_IMAGEMAGICK=false
     fi
     
-    read -p "Install FFmpeg from source? (Y/n): " -r
+    printf "Install FFmpeg from source? (Y/n): "
+    read -r REPLY </dev/tty
     if [[ $REPLY =~ ^[Nn]$ ]]; then
         INSTALL_FFMPEG=false
     fi
     
-    read -p "Node.js version [$NODE_VERSION]: " input
+    printf "Node.js version [$NODE_VERSION]: "
+    read -r input </dev/tty
     NODE_VERSION=${input:-$NODE_VERSION}
     
     # Confirmation
@@ -125,7 +141,8 @@ collect_user_input() {
     echo
     
     while true; do
-        read -p "Is this configuration correct? (Y/n): " -r
+        printf "Is this configuration correct? (Y/n): "
+        read -r REPLY </dev/tty
         case $REPLY in
             [Yy]*|"") break ;;
             [Nn]*) 
