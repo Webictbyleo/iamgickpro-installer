@@ -8,13 +8,26 @@ setup_database() {
     
     local backend_dir="$INSTALL_DIR/backend"
     
+    # Determine which credentials to use for database operations
+    if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
+        # Use root credentials - user needs database creation
+        DB_ADMIN_USER="root"
+        DB_ADMIN_PASSWORD="$MYSQL_ROOT_PASSWORD"
+        print_step "Using MySQL root credentials for database setup"
+    else
+        # Use provided user credentials - user can create databases
+        DB_ADMIN_USER="$DB_USER"
+        DB_ADMIN_PASSWORD="$DB_PASSWORD"
+        print_step "Using provided user credentials for database setup"
+    fi
+    
     # Test database connection
     print_step "Testing database connection"
     
-    mysql -h"$DB_HOST" -P"$DB_PORT" -u"root" -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1;" &> /dev/null
+    mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_ADMIN_USER" -p"$DB_ADMIN_PASSWORD" -e "SELECT 1;" &> /dev/null
     if [[ $? -ne 0 ]]; then
-        print_error "Cannot connect to MySQL server with root credentials"
-        print_error "Please verify that MySQL is running and root password is correct"
+        print_error "Cannot connect to MySQL server"
+        print_error "Please verify that MySQL is running and credentials are correct"
         return 1
     fi
     
@@ -23,12 +36,12 @@ setup_database() {
     # Check if database exists
     print_step "Checking database existence"
     
-    DB_EXISTS=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"root" -p"$MYSQL_ROOT_PASSWORD" -e "SHOW DATABASES LIKE '$DB_NAME';" | grep -c "$DB_NAME")
+    DB_EXISTS=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_ADMIN_USER" -p"$DB_ADMIN_PASSWORD" -e "SHOW DATABASES LIKE '$DB_NAME';" | grep -c "$DB_NAME")
     
     if [[ $DB_EXISTS -eq 0 ]]; then
         print_step "Creating database: $DB_NAME"
         
-        mysql -h"$DB_HOST" -P"$DB_PORT" -u"root" -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+        mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_ADMIN_USER" -p"$DB_ADMIN_PASSWORD" -e "CREATE DATABASE \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
         
         if [[ $? -ne 0 ]]; then
             print_error "Failed to create database: $DB_NAME"
@@ -40,21 +53,25 @@ setup_database() {
         print_success "Database already exists: $DB_NAME"
     fi
     
-    # Create or update database user
-    print_step "Setting up database user"
-    
-    mysql -h"$DB_HOST" -P"$DB_PORT" -u"root" -p"$MYSQL_ROOT_PASSWORD" << EOF
+    # Create database user only if using root credentials
+    if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
+        print_step "Setting up database user"
+        
+        mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_ADMIN_USER" -p"$DB_ADMIN_PASSWORD" << EOF
 CREATE USER IF NOT EXISTS '$DB_USER'@'%' IDENTIFIED BY '$DB_PASSWORD';
 GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'%';
 FLUSH PRIVILEGES;
 EOF
 
-    if [[ $? -ne 0 ]]; then
-        print_error "Failed to create database user"
-        return 1
+        if [[ $? -ne 0 ]]; then
+            print_error "Failed to create database user"
+            return 1
+        fi
+        
+        print_success "Database user configured"
+    else
+        print_step "Database user already has required permissions"
     fi
-    
-    print_success "Database user configured"
     
     # Test application database connection
     print_step "Testing application database connection"
@@ -65,7 +82,7 @@ EOF
     php bin/console doctrine:query:sql "SELECT 1" --env=prod &> /dev/null
     if [[ $? -ne 0 ]]; then
         print_error "Application cannot connect to database"
-        print_error "Please check the database configuration in .env.local"
+        print_error "Please check the database configuration in .env"
         return 1
     fi
     
