@@ -52,7 +52,7 @@ check_cached_config() {
                     MAIL_FROM_ADDRESS=""
                     FRONTEND_URL=""
                     UNSPLASH_API_KEY=""
-                    PEXELS_API_KEY=""
+                    ICONFINDER_API_KEY=""
                     
                     # Reset to default values where applicable
                     DB_HOST="localhost"
@@ -102,7 +102,7 @@ APP_NAME="$APP_NAME"
 MAIL_FROM_ADDRESS="$MAIL_FROM_ADDRESS"
 FRONTEND_URL="$FRONTEND_URL"
 UNSPLASH_API_KEY="$UNSPLASH_API_KEY"
-PEXELS_API_KEY="$PEXELS_API_KEY"
+ICONFINDER_API_KEY="$ICONFINDER_API_KEY"
 INSTALL_IMAGEMAGICK="$INSTALL_IMAGEMAGICK"
 INSTALL_FFMPEG="$INSTALL_FFMPEG"
 NODE_VERSION="$NODE_VERSION"
@@ -258,8 +258,8 @@ collect_user_input() {
     
     printf "Unsplash API key (for stock photos): "
     read -r UNSPLASH_API_KEY </dev/tty
-    printf "Pexels API key (for stock photos): "
-    read -r PEXELS_API_KEY </dev/tty
+    printf "IconFinder API key (for icons): "
+    read -r ICONFINDER_API_KEY </dev/tty
     
     # Set required installation options (no user input needed)
     echo
@@ -328,7 +328,7 @@ APP_NAME="$APP_NAME"
 MAIL_FROM_ADDRESS="$MAIL_FROM_ADDRESS"
 FRONTEND_URL="$FRONTEND_URL"
 UNSPLASH_API_KEY="$UNSPLASH_API_KEY"
-PEXELS_API_KEY="$PEXELS_API_KEY"
+ICONFINDER_API_KEY="$ICONFINDER_API_KEY"
 INSTALL_IMAGEMAGICK="$INSTALL_IMAGEMAGICK"
 INSTALL_FFMPEG="$INSTALL_FFMPEG"
 NODE_VERSION="$NODE_VERSION"

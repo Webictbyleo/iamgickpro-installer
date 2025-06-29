@@ -268,34 +268,30 @@ server {
 
     # Media file routes (serve from backend)
     location /media/ {
-        alias $INSTALL_DIR/backend/public/media/;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        try_files \$uri =404;
+       root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
     }
 
     # Upload file routes (serve from backend)
     location /uploads/ {
-        alias $INSTALL_DIR/backend/public/uploads/;
+        root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
         expires 1y;
         add_header Cache-Control "public, immutable";
-        try_files \$uri =404;
     }
 
     # Storage file routes (serve from backend)
     location /storage/ {
-        alias $INSTALL_DIR/backend/public/storage/;
+        root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
         expires 1y;
         add_header Cache-Control "public, immutable";
-        try_files \$uri =404;
     }
 
     # Thumbnail routes (serve from backend)
     location /thumbnails/ {
-        alias $INSTALL_DIR/backend/public/thumbnails/;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        try_files \$uri =404;
+        root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
     }
 
     # Secure media routes (serve from backend with security checks)
@@ -305,15 +301,12 @@ server {
         
     }
 
-    # Static assets caching (must be before frontend routes)
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        try_files \$uri =404;
-    }
+    
 
     # Frontend routes (SPA) - must be last to catch all remaining routes
     location / {
+        root /var/www/html/iamgickpro/public;
+		index index.html;
         try_files \$uri \$uri/ /index.html;
     }
 
@@ -329,10 +322,6 @@ server {
     location ~ package(-lock)?\.json {
         deny all;
     }
-
-    # File upload limits
-    client_max_body_size 50M;
-    client_body_timeout 120s;
 }
 EOF
 
