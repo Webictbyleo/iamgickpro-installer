@@ -121,16 +121,28 @@ EOF
     else
         print_step "No migration files found, creating schema directly"
         
-        # Create schema using Doctrine entities
-        php bin/console doctrine:schema:create --env=prod 2>&1
+        # Use schema:update which handles existing tables gracefully
+        print_step "Updating database schema to match entities"
+        php bin/console doctrine:schema:update --force --env=prod 2>&1
         schema_result=$?
         
         if [[ $schema_result -ne 0 ]]; then
-            print_error "Failed to create database schema"
-            return 1
+            print_warning "Schema update failed, trying to create fresh schema"
+            
+            # If update fails, try to drop and recreate
+            php bin/console doctrine:schema:drop --force --env=prod 2>/dev/null || true
+            php bin/console doctrine:schema:create --env=prod 2>&1
+            schema_result=$?
+            
+            if [[ $schema_result -ne 0 ]]; then
+                print_error "Failed to create database schema"
+                return 1
+            fi
+            
+            print_success "Database schema created from scratch"
+        else
+            print_success "Database schema updated successfully"
         fi
-        
-        print_success "Database schema created from entities"
     fi
     
     # Verify database schema
