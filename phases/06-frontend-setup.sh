@@ -220,6 +220,15 @@ server {
     location /api/ {
         root $INSTALL_DIR/backend/public;
         try_files \$uri /index.php\$is_args\$args;
+        
+        # Handle PHP files in API
+        location ~ \.php$ {
+            fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
+            fastcgi_index index.php;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+            fastcgi_param HTTPS off;
+        }
     }
 
     # Media file routes (serve from backend)
@@ -258,6 +267,15 @@ server {
     location /secure-media/ {
         root $INSTALL_DIR/backend/public;
         try_files \$uri /index.php\$is_args\$args;
+        
+        # Handle PHP files for security checks
+        location ~ \.php$ {
+            fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
+            fastcgi_index index.php;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+            fastcgi_param HTTPS off;
+        }
     }
 
     # Static assets caching (must be before frontend routes)
@@ -266,14 +284,7 @@ server {
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
     }
-    # Handle PHP files in API
-    location ~ \.php$ {
-        fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
-        fastcgi_index index.php;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        fastcgi_param HTTPS off;
-    }
+
     # Frontend routes (SPA) - must be last to catch all remaining routes
     location / {
         try_files \$uri \$uri/ /index.html;
@@ -300,9 +311,6 @@ EOF
 
     # Enable the site
     ln -sf /etc/nginx/sites-available/iamgickpro /etc/nginx/sites-enabled/
-    
-    # Remove default nginx site if it exists
-    rm -f /etc/nginx/sites-enabled/default
     
     # Test nginx configuration
     nginx -t
@@ -347,15 +355,6 @@ EOF
         print_success "Frontend static files validated ($static_files_found types found)"
     else
         print_warning "No common static files (js/css/ico) found in webroot"
-    fi
-    
-    # Test if site is accessible
-    sleep 2
-    curl -s -o /dev/null -w "%{http_code}" "http://localhost" | grep -q "200"
-    if [[ $? -ne 0 ]]; then
-        print_warning "Frontend accessibility test failed - site may not be immediately available"
-    else
-        print_success "Frontend is accessible"
     fi
     
     print_success "Frontend setup completed"
