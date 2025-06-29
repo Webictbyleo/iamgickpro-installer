@@ -121,7 +121,7 @@ import_content() {
             npm cache clean --force 2>/dev/null || true
             
             # Run npm install without output redirection to see real-time output
-            timeout 600 npm install --verbose
+            timeout 600 npm install
             npm_exit_code=$?
             
             if [[ $npm_exit_code -eq 124 ]]; then
