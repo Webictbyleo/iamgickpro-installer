@@ -1,0 +1,52 @@
+# Installer-specific gitignore
+
+# Logs
+*.log
+/tmp/*.log
+install.log
+install-*.log
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+temp/
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing and debug files
+test_*
+*_test*
+debug_*
+*_debug*
+*.test
+*output.txt
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Downloaded/cloned repositories during testing
+iamgickpro/
+test-install/
