@@ -44,15 +44,42 @@ collect_user_input() {
         fi
     done
     
-    # MySQL root password (for database creation)
-    while [[ -z "$MYSQL_ROOT_PASSWORD" ]]; do
-        printf "MySQL root password: "
-        read -sr MYSQL_ROOT_PASSWORD </dev/tty
-        echo
-        if [[ -z "$MYSQL_ROOT_PASSWORD" ]]; then
-            print_warning "MySQL root password is required for database creation"
+    # Test if the database user can create databases
+    print_step "Testing database permissions"
+    
+    # First, check if we can connect with the provided credentials
+    if mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1;" &>/dev/null 2>&1; then
+        print_success "Database user can connect"
+        
+        # Test if user can create databases
+        if mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS test_db_permission_check; DROP DATABASE IF EXISTS test_db_permission_check;" &>/dev/null 2>&1; then
+            print_success "Database user has sufficient privileges to create databases"
+            MYSQL_ROOT_PASSWORD=""  # We don't need root password
+        else
+            print_warning "Database user cannot create databases, will need MySQL root access"
+            # Ask for MySQL root password
+            while [[ -z "$MYSQL_ROOT_PASSWORD" ]]; do
+                printf "MySQL root password (needed to create database and user): "
+                read -sr MYSQL_ROOT_PASSWORD </dev/tty
+                echo
+                if [[ -z "$MYSQL_ROOT_PASSWORD" ]]; then
+                    print_warning "MySQL root password is required for database creation"
+                fi
+            done
         fi
-    done
+    else
+        print_warning "Cannot connect with provided database credentials"
+        print_step "Will create database user during installation"
+        # Ask for MySQL root password
+        while [[ -z "$MYSQL_ROOT_PASSWORD" ]]; do
+            printf "MySQL root password (needed to create database and user): "
+            read -sr MYSQL_ROOT_PASSWORD </dev/tty
+            echo
+            if [[ -z "$MYSQL_ROOT_PASSWORD" ]]; then
+                print_warning "MySQL root password is required for database and user creation"
+            fi
+        done
+    fi
     
     # Advanced database settings
     printf "Database host [$DB_HOST]: "
@@ -107,25 +134,18 @@ collect_user_input() {
     printf "Pexels API key (for stock photos): "
     read -r PEXELS_API_KEY </dev/tty
     
-    # Installation options
+    # Set required installation options (no user input needed)
     echo
-    echo -e "${CYAN}Installation Options:${NC}"
+    echo -e "${CYAN}Installation Configuration:${NC}"
+    echo -e "${CYAN}• Node.js version: ${WHITE}21${NC} (required)"
+    echo -e "${CYAN}• ImageMagick: ${WHITE}Will be compiled from source${NC} (required for image processing)"
+    echo -e "${CYAN}• FFmpeg: ${WHITE}Will be compiled from source${NC} (required for video processing)"
+    echo
     
-    printf "Install ImageMagick from source? (Y/n): "
-    read -r REPLY </dev/tty
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
-        INSTALL_IMAGEMAGICK=false
-    fi
-    
-    printf "Install FFmpeg from source? (Y/n): "
-    read -r REPLY </dev/tty
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
-        INSTALL_FFMPEG=false
-    fi
-    
-    printf "Node.js version [$NODE_VERSION]: "
-    read -r input </dev/tty
-    NODE_VERSION=${input:-$NODE_VERSION}
+    # Set the required values
+    NODE_VERSION="21"
+    INSTALL_IMAGEMAGICK=true
+    INSTALL_FFMPEG=true
     
     # Confirmation
     echo
@@ -135,9 +155,14 @@ collect_user_input() {
     echo -e "${CYAN}Database User:${NC} $DB_USER"
     echo -e "${CYAN}Admin Email:${NC} $ADMIN_EMAIL"
     echo -e "${CYAN}App Name:${NC} $APP_NAME"
-    echo -e "${CYAN}ImageMagick:${NC} $INSTALL_IMAGEMAGICK"
-    echo -e "${CYAN}FFmpeg:${NC} $INSTALL_FFMPEG"
     echo -e "${CYAN}Node.js:${NC} $NODE_VERSION"
+    echo -e "${CYAN}ImageMagick:${NC} Compiled from source"
+    echo -e "${CYAN}FFmpeg:${NC} Compiled from source"
+    if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
+        echo -e "${CYAN}MySQL Root:${NC} Will be used for database setup"
+    else
+        echo -e "${CYAN}Database Setup:${NC} Using provided user credentials"
+    fi
     echo
     
     while true; do
@@ -183,14 +208,23 @@ EOF
 validate_database_connection() {
     print_step "Validating database connection"
     
-    # Test MySQL root connection
-    if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u root -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1;" &>/dev/null; then
-        print_error "Cannot connect to MySQL with root credentials"
-        print_error "Please check your MySQL root password and ensure MySQL is running"
-        exit 1
+    if [[ -n "$MYSQL_ROOT_PASSWORD" ]]; then
+        # Test MySQL root connection
+        if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u root -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1;" &>/dev/null; then
+            print_error "Cannot connect to MySQL with root credentials"
+            print_error "Please check your MySQL root password and ensure MySQL is running"
+            exit 1
+        fi
+        print_success "MySQL root connection validated"
+    else
+        # Validate the database user connection again
+        if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1;" &>/dev/null; then
+            print_error "Cannot connect to MySQL with provided user credentials"
+            print_error "Please check your database credentials and ensure MySQL is running"
+            exit 1
+        fi
+        print_success "Database user connection validated"
     fi
-    
-    print_success "Database connection validated"
 }
 
 # Execute user input collection

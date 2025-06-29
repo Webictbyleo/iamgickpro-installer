@@ -54,9 +54,9 @@ MAIL_FROM_ADDRESS=""
 FRONTEND_URL=""
 UNSPLASH_API_KEY=""
 PEXELS_API_KEY=""
-INSTALL_IMAGEMAGICK=true
-INSTALL_FFMPEG=true
-NODE_VERSION="21"
+INSTALL_IMAGEMAGICK=true  # Required for image processing
+INSTALL_FFMPEG=true       # Required for video processing
+NODE_VERSION="21"         # Required version
 
 # Phase tracking
 declare -a COMPLETED_PHASES=()
@@ -279,6 +279,7 @@ show_welcome() {
     echo -e "${CYAN}• Database:${NC} Schema creation and migration"
     echo -e "${CYAN}• Content:${NC} Template and shape imports"
     echo -e "${CYAN}• Media Processing:${NC} ImageMagick, FFmpeg (compiled from source)"
+    echo -e "${CYAN}• Runtime:${NC} Node.js 21 (required version)"
     echo
     echo -e "${YELLOW}Installation Directory:${NC} $INSTALL_DIR"
     echo -e "${YELLOW}Log File:${NC} $LOG_FILE"
