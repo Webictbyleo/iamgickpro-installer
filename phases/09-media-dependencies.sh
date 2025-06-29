@@ -178,7 +178,8 @@ install_imagemagick() {
     # Compile ImageMagick
     print_step "Compiling ImageMagick (this may take several minutes)"
     
-    make -j$(nproc) &
+    local cpu_cores=$(nproc)
+    make -j"$cpu_cores" &
     spinner
     wait $!
     
@@ -278,9 +279,9 @@ install_ffmpeg() {
     
     # Check if FFmpeg is already installed and version >= 6
     if command -v ffmpeg &> /dev/null; then
-        local current_version=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}' | cut -d'.' -f1)
+        local current_version=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}' | cut -d'.' -f1 2>/dev/null || echo "0")
         if [[ -n "$current_version" ]] && [[ "$current_version" -ge 6 ]]; then
-            local full_version=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}')
+            local full_version=$(ffmpeg -version 2>&1 | head -n1 | awk '{print $3}' 2>/dev/null || echo "unknown")
             print_success "FFmpeg $full_version (>= 6.x) already installed - skipping compilation"
             return 0
         else
@@ -339,7 +340,8 @@ install_ffmpeg() {
     # Compile FFmpeg
     print_step "Compiling FFmpeg (this may take 10-15 minutes)"
     
-    make -j$(nproc) &
+    local cpu_cores=$(nproc)
+    make -j"$cpu_cores" &
     spinner
     wait $!
     
