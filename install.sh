@@ -22,6 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 readonly LOG_FILE="/var/log/iamgickpro-install.log"
 readonly INSTALL_DIR="/var/www/html/iamgickpro"
 readonly TEMP_DIR="/tmp/iamgickpro-install"
+readonly CONFIG_CACHE="/var/cache/iamgickpro-installer"
 readonly INSTALLER_REPO_URL="https://github.com/Webictbyleo/iamgickpro-installer.git"
 readonly REPO_URL="https://github.com/Webictbyleo/iamgickpro.git"
 readonly SHAPES_REPO_URL="https://github.com/Webictbyleo/design-vector-shapes.git"
@@ -260,6 +261,7 @@ create_directories() {
     
     mkdir -p "$INSTALL_DIR"
     mkdir -p "$TEMP_DIR"
+    mkdir -p "$CONFIG_CACHE"
     mkdir -p "$(dirname "$LOG_FILE")"
     
     print_success "Directories created"
@@ -283,6 +285,15 @@ show_welcome() {
     echo
     echo -e "${YELLOW}Installation Directory:${NC} $INSTALL_DIR"
     echo -e "${YELLOW}Log File:${NC} $LOG_FILE"
+    echo -e "${YELLOW}Configuration Cache:${NC} $CONFIG_CACHE"
+    echo
+    
+    # Show cache status
+    if [[ -f "$CONFIG_CACHE/config.env" ]]; then
+        echo -e "${GREEN}✓${NC} Configuration cache available (use --clear-cache to reset)"
+    else
+        echo -e "${YELLOW}ℹ${NC} No configuration cache found"
+    fi
     echo
     echo -e "${RED}⚠ WARNING:${NC} This installer will make system-wide changes."
     echo "   Make sure to backup your system before proceeding."
@@ -329,8 +340,74 @@ is_phase_completed() {
     return 1
 }
 
+# Show help information
+show_help() {
+    echo "IAMGickPro Production Installer v1.0.0"
+    echo
+    echo "Usage: sudo ./install.sh [OPTIONS]"
+    echo
+    echo "Options:"
+    echo "  -h, --help          Show this help message"
+    echo "  --clear-cache       Clear cached configuration and start fresh"
+    echo "  --show-cache        Display current cached configuration"
+    echo "  --force-reinstall   Force reinstallation of all components"
+    echo
+    echo "Examples:"
+    echo "  sudo ./install.sh                   # Normal installation"
+    echo "  sudo ./install.sh --clear-cache     # Clear cache and reconfigure"
+    echo "  sudo ./install.sh --show-cache      # Show cached settings"
+    echo
+}
+
+# Handle command line arguments
+handle_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            --clear-cache)
+                print_step "Clearing cached configuration"
+                rm -rf "$CONFIG_CACHE"
+                print_success "Configuration cache cleared"
+                exit 0
+                ;;
+            --show-cache)
+                if [[ -f "$CONFIG_CACHE/config.env" ]]; then
+                    echo -e "${CYAN}Cached Configuration:${NC}"
+                    echo
+                    grep -E '^[A-Z_]+=' "$CONFIG_CACHE/config.env" | grep -v PASSWORD | while IFS='=' read -r key value; do
+                        echo -e "${CYAN}$key:${NC} ${value//\"/}"
+                    done
+                    echo
+                    echo -e "${YELLOW}Note: Passwords are hidden for security${NC}"
+                    echo -e "${CYAN}Cache location:${NC} $CONFIG_CACHE/config.env"
+                    echo -e "${CYAN}Last modified:${NC} $(date -r "$CONFIG_CACHE/config.env" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo 'unknown')"
+                else
+                    echo -e "${YELLOW}No cached configuration found${NC}"
+                fi
+                exit 0
+                ;;
+            --force-reinstall)
+                export FORCE_REINSTALL=true
+                print_warning "Force reinstall mode enabled"
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                echo "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+        shift
+    done
+}
+
 # Main installation orchestrator
 main() {
+    # Handle command line arguments first
+    handle_arguments "$@"
+    
     # Initialize
     check_root
     create_directories

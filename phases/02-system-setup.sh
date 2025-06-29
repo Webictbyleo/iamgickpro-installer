@@ -111,6 +111,31 @@ add_php_repository() {
 
 # Install PHP 8.4 and extensions
 install_php() {
+    # Check if PHP 8.4 is already properly installed
+    if command -v php &> /dev/null; then
+        local php_version
+        php_version=$(php -v 2>/dev/null | head -n1 | grep -oP 'PHP \K[0-9]+\.[0-9]+' || echo "unknown")
+        if [[ "$php_version" == "8.4" ]]; then
+            # Check if required extensions are loaded
+            local missing_extensions=()
+            local required_extensions=("mysql" "pdo" "gd" "curl" "mbstring" "xml" "zip" "bcmath" "intl")
+            
+            for ext in "${required_extensions[@]}"; do
+                if ! php -m | grep -qi "$ext"; then
+                    missing_extensions+=("$ext")
+                fi
+            done
+            
+            if [[ ${#missing_extensions[@]} -eq 0 ]]; then
+                print_success "PHP 8.4 with all required extensions is already installed"
+                log "PHP version: $(php -v | head -n1)"
+                return 0
+            else
+                print_warning "PHP 8.4 found but missing extensions: ${missing_extensions[*]}"
+            fi
+        fi
+    fi
+    
     print_step "Installing PHP 8.4 and essential extensions"
     
     # Show information about package selection
@@ -214,6 +239,13 @@ install_php() {
 
 # Install Composer
 install_composer() {
+    # Check if Composer is already installed
+    if command -v composer &> /dev/null; then
+        print_success "Composer is already installed"
+        log "Composer version: $(composer --version 2>/dev/null || echo 'unknown')"
+        return 0
+    fi
+    
     print_step "Installing Composer"
     
     # Download and install Composer
@@ -308,6 +340,24 @@ install_nodejs() {
 
 # Install MySQL
 install_mysql() {
+    # Check if MySQL is already installed and running
+    if systemctl is-active mysql &>/dev/null || systemctl is-active mysqld &>/dev/null; then
+        print_success "MySQL server is already installed and running"
+        return 0
+    fi
+    
+    # Check if MySQL is installed but not running
+    if command -v mysql &> /dev/null; then
+        print_step "MySQL is installed but not running, starting it"
+        systemctl start mysql 2>/dev/null || systemctl start mysqld 2>/dev/null
+        systemctl enable mysql 2>/dev/null || systemctl enable mysqld 2>/dev/null
+        
+        if systemctl is-active mysql &>/dev/null || systemctl is-active mysqld &>/dev/null; then
+            print_success "MySQL server started successfully"
+            return 0
+        fi
+    fi
+    
     print_step "Installing MySQL server"
     
     if [[ "$PKG_MANAGER" == "apt" ]]; then
@@ -348,6 +398,24 @@ EOF
 
 # Install nginx
 install_nginx() {
+    # Check if nginx is already installed and running
+    if systemctl is-active nginx &>/dev/null; then
+        print_success "nginx is already installed and running"
+        return 0
+    fi
+    
+    # Check if nginx is installed but not running
+    if command -v nginx &> /dev/null; then
+        print_step "nginx is installed but not running, starting it"
+        systemctl start nginx
+        systemctl enable nginx
+        
+        if systemctl is-active nginx &>/dev/null; then
+            print_success "nginx started successfully"
+            return 0
+        fi
+    fi
+    
     print_step "Installing nginx"
     
     $PKG_INSTALL nginx &
@@ -367,6 +435,24 @@ install_nginx() {
 
 # Install Redis (optional but recommended)
 install_redis() {
+    # Check if Redis is already installed and running
+    if systemctl is-active redis &>/dev/null || systemctl is-active redis-server &>/dev/null; then
+        print_success "Redis is already installed and running"
+        return 0
+    fi
+    
+    # Check if Redis is installed but not running
+    if command -v redis-server &> /dev/null; then
+        print_step "Redis is installed but not running, starting it"
+        systemctl start redis 2>/dev/null || systemctl start redis-server
+        systemctl enable redis 2>/dev/null || systemctl enable redis-server
+        
+        if systemctl is-active redis &>/dev/null || systemctl is-active redis-server &>/dev/null; then
+            print_success "Redis started successfully"
+            return 0
+        fi
+    fi
+    
     print_step "Installing Redis"
     
     $PKG_INSTALL redis-server &
@@ -467,8 +553,93 @@ cleanup_repositories() {
     print_success "Repository cleanup completed"
 }
 
+# Check if software is already installed
+check_existing_installations() {
+    print_step "Checking existing installations"
+    
+    local checks_passed=0
+    local total_checks=6
+    
+    # Check PHP 8.4
+    if command -v php &> /dev/null; then
+        local php_version
+        php_version=$(php -v 2>/dev/null | head -n1 | grep -oP 'PHP \K[0-9]+\.[0-9]+' || echo "unknown")
+        if [[ "$php_version" == "8.4" ]]; then
+            print_success "PHP 8.4 is already installed"
+            checks_passed=$((checks_passed + 1))
+        else
+            print_warning "PHP $php_version found, need 8.4"
+        fi
+    else
+        print_warning "PHP not found"
+    fi
+    
+    # Check Composer
+    if command -v composer &> /dev/null; then
+        print_success "Composer is already installed"
+        checks_passed=$((checks_passed + 1))
+    else
+        print_warning "Composer not found"
+    fi
+    
+    # Check Node.js
+    if command -v node &> /dev/null; then
+        local node_version
+        node_version=$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)
+        if [[ "$node_version" == "$NODE_VERSION" ]]; then
+            print_success "Node.js $NODE_VERSION is already installed"
+            checks_passed=$((checks_passed + 1))
+        else
+            print_warning "Node.js $node_version found, need $NODE_VERSION"
+        fi
+    else
+        print_warning "Node.js not found"
+    fi
+    
+    # Check MySQL
+    if systemctl is-active mysql &>/dev/null || systemctl is-active mysqld &>/dev/null; then
+        print_success "MySQL server is already running"
+        checks_passed=$((checks_passed + 1))
+    else
+        print_warning "MySQL server not running or not installed"
+    fi
+    
+    # Check nginx
+    if systemctl is-active nginx &>/dev/null; then
+        print_success "nginx is already running"
+        checks_passed=$((checks_passed + 1))
+    else
+        print_warning "nginx not running or not installed"
+    fi
+    
+    # Check Redis
+    if systemctl is-active redis &>/dev/null || systemctl is-active redis-server &>/dev/null; then
+        print_success "Redis is already running"
+        checks_passed=$((checks_passed + 1))
+    else
+        print_warning "Redis not running or not installed"
+    fi
+    
+    echo
+    echo -e "${CYAN}Installation Status: ${WHITE}$checks_passed/$total_checks${NC} components already installed"
+    
+    if [[ $checks_passed -eq $total_checks ]]; then
+        echo -e "${GREEN}All system components are already installed! Skipping system setup.${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}Will install/update missing components.${NC}"
+        return 1
+    fi
+}
+
 # Main system setup function
 setup_system() {
+    # Check existing installations first
+    if check_existing_installations; then
+        print_success "All system components already installed, skipping system setup"
+        return 0
+    fi
+    
     detect_package_manager
     cleanup_repositories
     update_system
@@ -487,4 +658,4 @@ setup_system() {
 }
 
 # Execute system setup
-setup_system
+check_existing_installations || setup_system

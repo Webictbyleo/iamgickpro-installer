@@ -3,6 +3,89 @@
 # Phase 1: User Input Collection
 # Collects all necessary configuration from the user
 
+# Check for cached configuration
+check_cached_config() {
+    local cached_config="$CONFIG_CACHE/config.env"
+    
+    if [[ -f "$cached_config" ]]; then
+        print_step "Found cached configuration from previous installation"
+        
+        # Load cached configuration
+        source "$cached_config"
+        
+        echo
+        echo -e "${CYAN}Cached Configuration Found:${NC}"
+        echo -e "${CYAN}Domain:${NC} ${DOMAIN_NAME:-'(not set)'}"
+        echo -e "${CYAN}Database:${NC} ${DB_NAME:-'(not set)'} @ ${DB_HOST:-'localhost'}:${DB_PORT:-'3306'}"
+        echo -e "${CYAN}Database User:${NC} ${DB_USER:-'(not set)'}"
+        echo -e "${CYAN}Admin Email:${NC} ${ADMIN_EMAIL:-'(not set)'}"
+        echo -e "${CYAN}App Name:${NC} ${APP_NAME:-'IAMGickPro'}"
+        echo -e "${CYAN}Node.js:${NC} ${NODE_VERSION:-'22'}"
+        echo -e "${CYAN}Last Updated:${NC} $(date -r "$cached_config" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo 'unknown')"
+        echo
+        
+        while true; do
+            printf "Use this cached configuration? (Y/n): "
+            read -r REPLY </dev/tty
+            echo
+            case $REPLY in
+                [Yy]*|"") 
+                    print_success "Using cached configuration"
+                    log "Using cached configuration from $cached_config"
+                    return 0
+                    ;;
+                [Nn]*) 
+                    print_step "Starting fresh configuration"
+                    log "User chose to reconfigure instead of using cache"
+                    return 1
+                    ;;
+                *) 
+                    echo "Please answer yes (y) or no (n)." 
+                    ;;
+            esac
+        done
+    else
+        log "No cached configuration found, starting fresh"
+        return 1
+    fi
+}
+
+# Save configuration to cache
+save_config_cache() {
+    local cached_config="$CONFIG_CACHE/config.env"
+    
+    print_step "Saving configuration for future use"
+    
+    cat > "$cached_config" << EOF
+# IAMGickPro Installation Configuration
+# Generated: $(date)
+# This file is automatically created and can be safely deleted to force reconfiguration
+
+DOMAIN_NAME="$DOMAIN_NAME"
+DB_HOST="$DB_HOST"
+DB_PORT="$DB_PORT"
+DB_NAME="$DB_NAME"
+DB_USER="$DB_USER"
+DB_PASSWORD="$DB_PASSWORD"
+MYSQL_ROOT_PASSWORD="$MYSQL_ROOT_PASSWORD"
+ADMIN_EMAIL="$ADMIN_EMAIL"
+ADMIN_PASSWORD="$ADMIN_PASSWORD"
+APP_NAME="$APP_NAME"
+MAIL_FROM_ADDRESS="$MAIL_FROM_ADDRESS"
+FRONTEND_URL="$FRONTEND_URL"
+UNSPLASH_API_KEY="$UNSPLASH_API_KEY"
+PEXELS_API_KEY="$PEXELS_API_KEY"
+INSTALL_IMAGEMAGICK="$INSTALL_IMAGEMAGICK"
+INSTALL_FFMPEG="$INSTALL_FFMPEG"
+NODE_VERSION="$NODE_VERSION"
+EOF
+    
+    chmod 600 "$cached_config"  # Secure the config file
+    print_success "Configuration cached at $cached_config"
+    log "Configuration saved to cache: $cached_config"
+}
+
+# Collect user input
 collect_user_input() {
     print_step "Collecting configuration information"
     echo
@@ -180,7 +263,10 @@ collect_user_input() {
     
     print_success "Configuration collected and confirmed"
     
-    # Save configuration for recovery
+    # Save configuration for recovery and future use
+    save_config_cache
+    
+    # Also save to temp directory for current installation
     cat > "$TEMP_DIR/config.env" << EOF
 DOMAIN_NAME="$DOMAIN_NAME"
 DB_HOST="$DB_HOST"
@@ -228,5 +314,5 @@ validate_database_connection() {
 }
 
 # Execute user input collection
-collect_user_input
+check_cached_config || collect_user_input
 validate_database_connection
