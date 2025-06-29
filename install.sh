@@ -144,6 +144,9 @@ check_root() {
 
 # Auto-clone installer if phases are missing (for curl | bash usage)
 ensure_installer_complete() {
+    # Clean up old installer downloads first
+    rm -rf "$TEMP_DIR"/installer* 2>/dev/null || true
+    
     if [[ ! -d "$SCRIPT_DIR/phases" ]]; then
         echo
         print_step "Detected curl | bash installation"
@@ -158,63 +161,155 @@ ensure_installer_complete() {
         
         # Clone the installer repository to temp location
         local installer_temp="$TEMP_DIR/installer"
-        print_step "Cloning installer repository"
+        download_installer "$installer_temp"
         
-        # Test GitHub connectivity first
-        if ! curl -s --connect-timeout 10 https://github.com > /dev/null; then
-            print_error "Cannot reach GitHub. Please check your internet connection."
-            exit 1
-        fi
-        
-        # Try to clone the repository
-        if git clone --quiet --depth 1 "$INSTALLER_REPO_URL" "$installer_temp" 2>/dev/null; then
-            if [[ -d "$installer_temp/phases" ]]; then
-                # Update SCRIPT_DIR to point to the complete installer
-                SCRIPT_DIR="$installer_temp"
-                print_success "Complete installer downloaded successfully"
-            else
-                print_error "Downloaded installer is incomplete (missing phases)"
-                exit 1
+        echo
+    elif [[ "$SCRIPT_DIR" == *"/tmp/"* ]]; then
+        # We're running from a temp directory, check for updates
+        check_installer_updates
+    fi
+}
+
+# Download installer components
+download_installer() {
+    local installer_temp="$1"
+    
+    print_step "Cloning installer repository"
+    
+    # Test GitHub connectivity first
+    if ! curl -s --connect-timeout 10 https://github.com > /dev/null; then
+        print_error "Cannot reach GitHub. Please check your internet connection."
+        exit 1
+    fi
+    
+    # Remove existing temp directory if it exists
+    rm -rf "$installer_temp"
+    
+    # Try to clone the repository
+    if git clone --quiet --depth 1 "$INSTALLER_REPO_URL" "$installer_temp" 2>/dev/null; then
+        if [[ -d "$installer_temp/phases" ]]; then
+            # Update SCRIPT_DIR to point to the complete installer
+            SCRIPT_DIR="$installer_temp"
+            print_success "Complete installer downloaded successfully"
+            
+            # Log the installer version if available
+            if [[ -d "$installer_temp/.git" ]]; then
+                local downloaded_version
+                downloaded_version=$(cd "$installer_temp" && git rev-parse HEAD 2>/dev/null || echo "unknown")
+                log "Downloaded installer version: ${downloaded_version:0:8}"
             fi
         else
-            print_error "Failed to clone installer repository"
-            print_error "Repository URL: $INSTALLER_REPO_URL"
-            print_error "This might happen if:"
-            print_error "1. The repository doesn't exist yet (you need to push it to GitHub)"
-            print_error "2. The repository is private"
-            print_error "3. Network connectivity issues"
-            echo
-            print_step "Attempting alternative download method..."
-            
-            # Try downloading as zip file instead
-            local zip_url="https://github.com/Webictbyleo/iamgickpro-installer/archive/refs/heads/main.zip"
-            if command -v wget &> /dev/null; then
-                if wget -q "$zip_url" -O "$installer_temp.zip" 2>/dev/null; then
-                    if command -v unzip &> /dev/null || { apt-get install -y unzip &>/dev/null; }; then
-                        unzip -q "$installer_temp.zip" -d "$(dirname "$installer_temp")" 2>/dev/null
-                        mv "$(dirname "$installer_temp")/iamgickpro-installer-main" "$installer_temp" 2>/dev/null || true
-                        if [[ -d "$installer_temp/phases" ]]; then
-                            SCRIPT_DIR="$installer_temp"
-                            print_success "Downloaded installer via zip archive"
-                        else
-                            print_error "Zip download failed or incomplete"
-                            exit 1
-                        fi
+            print_error "Downloaded installer is incomplete (missing phases)"
+            exit 1
+        fi
+    else
+        print_error "Failed to clone installer repository"
+        print_error "Repository URL: $INSTALLER_REPO_URL"
+        print_error "This might happen if:"
+        print_error "1. The repository doesn't exist yet (you need to push it to GitHub)"
+        print_error "2. The repository is private"
+        print_error "3. Network connectivity issues"
+        echo
+        print_step "Attempting alternative download method..."
+        
+        # Try downloading as zip file instead
+        local zip_url="https://github.com/Webictbyleo/iamgickpro-installer/archive/refs/heads/main.zip"
+        if command -v wget &> /dev/null; then
+            if wget -q "$zip_url" -O "$installer_temp.zip" 2>/dev/null; then
+                if command -v unzip &> /dev/null || { apt-get install -y unzip &>/dev/null; }; then
+                    unzip -q "$installer_temp.zip" -d "$(dirname "$installer_temp")" 2>/dev/null
+                    mv "$(dirname "$installer_temp")/iamgickpro-installer-main" "$installer_temp" 2>/dev/null || true
+                    if [[ -d "$installer_temp/phases" ]]; then
+                        SCRIPT_DIR="$installer_temp"
+                        print_success "Downloaded installer via zip archive"
                     else
-                        print_error "Cannot install unzip utility"
+                        print_error "Zip download failed or incomplete"
                         exit 1
                     fi
                 else
-                    print_error "Alternative download also failed"
+                    print_error "Cannot install unzip utility"
                     exit 1
                 fi
             else
-                print_error "wget not available for alternative download"
+                print_error "Alternative download also failed"
                 exit 1
             fi
+        else
+            print_error "wget not available for alternative download"
+            exit 1
         fi
-        
-        echo
+    fi
+}
+
+# Check for installer updates
+check_installer_updates() {
+    # Skip update check if requested
+    if [[ "${SKIP_UPDATE_CHECK:-false}" == "true" ]]; then
+        print_step "Skipping installer update check (--skip-update-check)"
+        return 0
+    fi
+    
+    print_step "Checking for installer updates"
+    
+    # Get current installer version/commit hash if available
+    local current_version=""
+    if [[ -d "$SCRIPT_DIR/.git" ]]; then
+        current_version=$(cd "$SCRIPT_DIR" && git rev-parse HEAD 2>/dev/null || echo "unknown")
+    fi
+    
+    # Get latest version from remote
+    local latest_version=""
+    if command -v git &> /dev/null && curl -s --connect-timeout 10 https://github.com > /dev/null; then
+        latest_version=$(git ls-remote "$INSTALLER_REPO_URL" HEAD 2>/dev/null | cut -f1 || echo "unknown")
+    fi
+    
+    # Force update if requested
+    if [[ "${FORCE_UPDATE_INSTALLER:-false}" == "true" ]]; then
+        print_step "Force updating installer (--update-installer)"
+        local new_installer="$TEMP_DIR/installer-updated"
+        download_installer "$new_installer"
+        print_success "Installer forcefully updated"
+        return 0
+    fi
+    
+    if [[ -n "$latest_version" && "$latest_version" != "unknown" && "$current_version" != "unknown" ]]; then
+        if [[ "$current_version" != "$latest_version" ]]; then
+            print_warning "Installer updates available!"
+            echo
+            echo -e "${CYAN}Current version:${NC} ${current_version:0:8}"
+            echo -e "${CYAN}Latest version:${NC} ${latest_version:0:8}"
+            echo
+            echo -e "${YELLOW}TIP:${NC} Use --update-installer to force update or --skip-update-check to skip this check"
+            echo
+            
+            while true; do
+                printf "Download latest installer version? (Y/n): "
+                read -r REPLY </dev/tty
+                echo
+                case $REPLY in
+                    [Yy]*|"") 
+                        print_step "Downloading latest installer"
+                        local new_installer="$TEMP_DIR/installer-updated"
+                        download_installer "$new_installer"
+                        print_success "Updated installer downloaded"
+                        break
+                        ;;
+                    [Nn]*) 
+                        print_warning "Continuing with current installer version"
+                        log_warning "User chose to continue with outdated installer"
+                        break
+                        ;;
+                    *) 
+                        echo "Please answer yes (y) or no (n)." 
+                        ;;
+                esac
+            done
+        else
+            print_success "Installer is up to date"
+        fi
+    else
+        print_warning "Could not check for updates (network or git issue)"
+        log_warning "Update check failed: current=$current_version, latest=$latest_version"
     fi
 }
 
@@ -351,11 +446,14 @@ show_help() {
     echo "  --clear-cache       Clear cached configuration and start fresh"
     echo "  --show-cache        Display current cached configuration"
     echo "  --force-reinstall   Force reinstallation of all components"
+    echo "  --update-installer  Force update the installer to latest version"
+    echo "  --skip-update-check Skip checking for installer updates"
     echo
     echo "Examples:"
     echo "  sudo ./install.sh                   # Normal installation"
     echo "  sudo ./install.sh --clear-cache     # Clear cache and reconfigure"
     echo "  sudo ./install.sh --show-cache      # Show cached settings"
+    echo "  sudo ./install.sh --update-installer # Force installer update"
     echo
 }
 
@@ -392,6 +490,14 @@ handle_arguments() {
             --force-reinstall)
                 export FORCE_REINSTALL=true
                 print_warning "Force reinstall mode enabled"
+                ;;
+            --update-installer)
+                export FORCE_UPDATE_INSTALLER=true
+                print_step "Force installer update mode enabled"
+                ;;
+            --skip-update-check)
+                export SKIP_UPDATE_CHECK=true
+                print_step "Skipping installer update check"
                 ;;
             *)
                 print_error "Unknown option: $1"
