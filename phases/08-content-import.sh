@@ -93,7 +93,7 @@ import_content() {
         else
             # Run npm install with timeout and error handling
             print_step "Installing Node.js dependencies (this may take a few minutes)"
-            timeout 300 npm install --silent 2>&1
+            timeout 300 npm install 2>&1
             npm_exit_code=$?
             
             if [[ $npm_exit_code -eq 124 ]]; then
@@ -124,7 +124,8 @@ import_content() {
     
     # Run the template import with timeout and better error handling
     print_step "Starting template import (this may take several minutes)"
-    timeout 600 node advanced-template-importer.js --limit 50 --force 2>&1
+    print_step "Database URL: mysql://$DB_USER:***@$DB_HOST:$DB_PORT/$DB_NAME"
+    timeout 600 node advanced-template-importer.js --limit 50 --force
     import_exit_code=$?
     
     if [[ $import_exit_code -eq 124 ]]; then
