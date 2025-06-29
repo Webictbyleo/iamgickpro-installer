@@ -50,6 +50,19 @@ import_content() {
     
     print_success "Vector shapes imported"
     
+    # Set up content directories and permissions (before template import)
+    print_step "Setting up content directories"
+    
+    mkdir -p public/uploads/templates
+    mkdir -p public/uploads/thumbnails
+    mkdir -p public/uploads/shapes
+    mkdir -p public/uploads/media
+    
+    chown -R www-data:www-data public/uploads/
+    chmod -R 775 public/uploads/
+    
+    print_success "Content directories configured"
+    
     # Verify shape import
     print_step "Verifying shape import"
     
@@ -153,10 +166,17 @@ import_content() {
         return 1
     fi
     
+    # Verify the backend directory exists and has upload directories
+    if [[ ! -d "$backend_dir/public/uploads/templates" ]]; then
+        print_error "Backend upload directories not found: $backend_dir/public/uploads/templates"
+        return 1
+    fi
+    
     # Run the template import with timeout and better error handling
     print_step "Starting template import (this may take several minutes)"
     print_step "Database URL: mysql://$DB_USER:***@$DB_HOST:$DB_PORT/$DB_NAME"
     print_step "Backend directory: $backend_dir"
+    print_step "Upload directory: $backend_dir/public/uploads/templates"
     timeout 600 node advanced-template-importer.js --limit 50 --force --clear-existing --backend-dir="$backend_dir"
     import_exit_code=$?
     
@@ -180,19 +200,6 @@ import_content() {
     else
         print_success "$TEMPLATE_COUNT templates imported successfully"
     fi
-    
-    # Set up content directories and permissions
-    print_step "Setting up content directories"
-    
-    mkdir -p public/uploads/templates
-    mkdir -p public/uploads/thumbnails
-    mkdir -p public/uploads/shapes
-    mkdir -p public/uploads/media
-    
-    chown -R www-data:www-data public/uploads/
-    chmod -R 775 public/uploads/
-    
-    print_success "Content directories configured"
     
     # Create content management commands
     print_step "Setting up content management"
