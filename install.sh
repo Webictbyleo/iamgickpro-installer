@@ -18,10 +18,11 @@
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly LOG_FILE="/var/log/iamgickpro-install.log"
 readonly INSTALL_DIR="/var/www/html/iamgickpro"
 readonly TEMP_DIR="/tmp/iamgickpro-install"
+readonly INSTALLER_REPO_URL="https://github.com/Webictbyleo/iamgickpro-installer.git"
 readonly REPO_URL="https://github.com/Webictbyleo/iamgickpro.git"
 readonly SHAPES_REPO_URL="https://github.com/Webictbyleo/design-vector-shapes.git"
 
@@ -140,6 +141,43 @@ check_root() {
     fi
 }
 
+# Auto-clone installer if phases are missing (for curl | bash usage)
+ensure_installer_complete() {
+    if [[ ! -d "$SCRIPT_DIR/phases" ]]; then
+        echo
+        print_step "Detected curl | bash installation"
+        print_step "Downloading complete installer components"
+        
+        # Check if git is available
+        if ! command -v git &> /dev/null; then
+            print_step "Installing git (required for download)"
+            apt-get update -qq
+            apt-get install -y git
+        fi
+        
+        # Clone the installer repository to temp location
+        local installer_temp="$TEMP_DIR/installer"
+        print_step "Cloning installer repository"
+        
+        if git clone "$INSTALLER_REPO_URL" "$installer_temp" &>/dev/null; then
+            if [[ -d "$installer_temp/phases" ]]; then
+                # Update SCRIPT_DIR to point to the complete installer
+                SCRIPT_DIR="$installer_temp"
+                print_success "Complete installer downloaded successfully"
+            else
+                print_error "Downloaded installer is incomplete (missing phases)"
+                exit 1
+            fi
+        else
+            print_error "Failed to download installer from GitHub"
+            print_error "Please check your internet connection and try again"
+            exit 1
+        fi
+        
+        echo
+    fi
+}
+
 # Check system requirements
 check_system() {
     print_step "Checking system requirements"
@@ -255,8 +293,9 @@ is_phase_completed() {
 main() {
     # Initialize
     check_root
-    check_system
     create_directories
+    ensure_installer_complete
+    check_system
     show_welcome
     
     # Start logging
