@@ -24,7 +24,7 @@ setup_backend() {
     rsync -av --exclude=vendor/ --exclude=var/ --exclude=.env* "$backend_source/" "$backend_dest/"
     
     # Copy environment file
-    cp "$backend_source/.env.local" "$backend_dest/.env.local"
+    cp "$backend_source/.env" "$backend_dest/.env"
     
     print_success "Backend files copied"
     
@@ -67,10 +67,10 @@ setup_backend() {
     mkdir -p config/jwt
     
     # Generate private key
-    openssl genpkey -algorithm RSA -out config/jwt/private.pem -aes256 -pass pass:"$(grep JWT_PASSPHRASE .env.local | cut -d'=' -f2)" -pkeyopt rsa_keygen_bits:4096
+    openssl genpkey -algorithm RSA -out config/jwt/private.pem -aes256 -pass pass:"$(grep JWT_PASSPHRASE .env | cut -d'=' -f2)" -pkeyopt rsa_keygen_bits:4096
     
     # Generate public key  
-    openssl pkey -in config/jwt/private.pem -out config/jwt/public.pem -pubout -passin pass:"$(grep JWT_PASSPHRASE .env.local | cut -d'=' -f2)"
+    openssl pkey -in config/jwt/private.pem -out config/jwt/public.pem -pubout -passin pass:"$(grep JWT_PASSPHRASE .env | cut -d'=' -f2)"
     
     # Set JWT key permissions
     chmod 600 config/jwt/private.pem
@@ -120,8 +120,8 @@ setup_backend() {
         return 1
     fi
     
-    if [[ ! -f ".env.local" ]]; then
-        print_error "Backend installation validation failed: .env.local not found"
+    if [[ ! -f ".env" ]]; then
+        print_error "Backend installation validation failed: .env not found"
         return 1
     fi
     
