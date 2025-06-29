@@ -45,16 +45,67 @@ setup_frontend() {
     
     cd "$frontend_dest"
     
+    # Verify package.json exists
+    if [[ ! -f "package.json" ]]; then
+        print_error "package.json not found in frontend directory"
+        return 1
+    fi
+    
+    # Show npm and node versions for debugging
+    print_step "Environment information:"
+    echo "  Node.js: $(node -v)"
+    echo "  NPM: $(npm -v)"
+    echo "  Working directory: $(pwd)"
+    echo "  Package.json exists: $(ls -la package.json 2>/dev/null || echo 'MISSING')"
+    
     # Install npm dependencies
     print_step "Installing frontend dependencies"
     
-    npm ci --production --silent &
-    spinner
-    wait $!
+    # Clean npm cache to avoid issues
+    npm cache clean --force > /dev/null 2>&1 || true
     
-    if [[ $? -ne 0 ]]; then
-        print_error "Failed to install frontend dependencies"
+    # Capture npm output for debugging
+    local npm_log_file="${TEMP_DIR}/npm_install.log"
+    
+    # Try npm ci first (faster and more reliable for production)
+    print_step "Running npm ci --production..."
+    
+    # Set a timeout for npm install (10 minutes)
+    timeout 600 npm ci --production > "$npm_log_file" 2>&1 &
+    local npm_pid=$!
+    spinner
+    wait $npm_pid
+    local npm_exit_code=$?
+    
+    if [[ $npm_exit_code -eq 124 ]]; then
+        print_error "NPM install timed out after 10 minutes"
+        echo "Last 50 lines of NPM output:"
+        tail -n 50 "$npm_log_file" 2>/dev/null || echo "No output file found"
         return 1
+    elif [[ $npm_exit_code -ne 0 ]]; then
+        print_warning "npm ci failed, trying npm install as fallback"
+        echo "npm ci output:"
+        cat "$npm_log_file"
+        
+        # Fallback to npm install
+        print_step "Running npm install --production..."
+        timeout 600 npm install --production > "$npm_log_file" 2>&1 &
+        local npm_pid2=$!
+        spinner
+        wait $npm_pid2
+        local npm_exit_code2=$?
+        
+        if [[ $npm_exit_code2 -eq 124 ]]; then
+            print_error "NPM install fallback timed out after 10 minutes"
+            echo "Last 50 lines of NPM output:"
+            tail -n 50 "$npm_log_file" 2>/dev/null || echo "No output file found"
+            return 1
+        elif [[ $npm_exit_code2 -ne 0 ]]; then
+            print_error "Both npm ci and npm install failed (exit code: $npm_exit_code2)"
+            echo "npm install output:"
+            cat "$npm_log_file"
+            return 1
+        fi
     fi
     
     print_success "Frontend dependencies installed"
@@ -62,12 +113,25 @@ setup_frontend() {
     # Build frontend for production
     print_step "Building frontend application"
     
-    npm run build &
-    spinner
-    wait $!
+    # Capture build output for debugging
+    local build_log_file="${TEMP_DIR}/npm_build.log"
     
-    if [[ $? -ne 0 ]]; then
-        print_error "Frontend build failed"
+    # Set a timeout for npm build (15 minutes)
+    timeout 900 npm run build > "$build_log_file" 2>&1 &
+    local build_pid=$!
+    spinner
+    wait $build_pid
+    local build_exit_code=$?
+    
+    if [[ $build_exit_code -eq 124 ]]; then
+        print_error "NPM build timed out after 15 minutes"
+        echo "Last 50 lines of build output:"
+        tail -n 50 "$build_log_file" 2>/dev/null || echo "No output file found"
+        return 1
+    elif [[ $build_exit_code -ne 0 ]]; then
+        print_error "Frontend build failed (exit code: $build_exit_code)"
+        echo "Build output:"
+        cat "$build_log_file"
         return 1
     fi
     
