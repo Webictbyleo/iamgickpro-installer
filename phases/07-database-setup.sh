@@ -181,31 +181,75 @@ EOF
     # Create database indexes for performance (if not created by migrations)
     print_step "Optimizing database performance"
     
-    # Use a more compatible approach for MySQL indexes
-    mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" << 'EOF'
+    # First, get the actual tables that exist
+    print_step "Checking actual database tables"
+    ACTUAL_TABLES=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e "SHOW TABLES;" 2>/dev/null | tail -n +2 | tr '\n' ' ')
+    print_step "Found tables: $ACTUAL_TABLES"
+    
+    # Use the correct table names based on actual Doctrine entities
+    mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" << 'EOF' 2>/dev/null || true
 -- Add indexes for common queries (ignore errors if they already exist)
--- User table
-CREATE INDEX idx_user_email ON user(email);
-CREATE INDEX idx_user_created_at ON user(created_at);
+-- Users table (additional performance indexes)
+CREATE INDEX idx_users_created_at ON users(created_at);
+CREATE INDEX idx_users_is_active ON users(is_active);
+CREATE INDEX idx_users_last_login_at ON users(last_login_at);
+CREATE INDEX idx_users_plan ON users(plan);
+CREATE INDEX idx_users_deleted_at ON users(deleted_at);
 
--- Design table  
-CREATE INDEX idx_design_user_id ON design(user_id);
-CREATE INDEX idx_design_created_at ON design(created_at);
-CREATE INDEX idx_design_status ON design(status);
+-- Designs table indexes
+CREATE INDEX idx_designs_project_id ON designs(project_id);
+CREATE INDEX idx_designs_created_at ON designs(created_at);
+CREATE INDEX idx_designs_updated_at ON designs(updated_at);
+CREATE INDEX idx_designs_is_public ON designs(is_public);
+CREATE INDEX idx_designs_deleted_at ON designs(deleted_at);
 
--- Template table
-CREATE INDEX idx_template_category ON template(category);
-CREATE INDEX idx_template_featured ON template(featured);
-CREATE INDEX idx_template_created_at ON template(created_at);
+-- Projects table indexes
+CREATE INDEX idx_projects_user_id ON projects(user_id);
+CREATE INDEX idx_projects_created_at ON projects(created_at);
+CREATE INDEX idx_projects_updated_at ON projects(updated_at);
+CREATE INDEX idx_projects_is_public ON projects(is_public);
+CREATE INDEX idx_projects_deleted_at ON projects(deleted_at);
 
--- Media table
-CREATE INDEX idx_media_user_id ON media(user_id);
-CREATE INDEX idx_media_type ON media(type);
+-- Templates table indexes (additional to existing ones)
+CREATE INDEX idx_templates_is_active ON templates(is_active);
+CREATE INDEX idx_templates_usage_count ON templates(usage_count);
+CREATE INDEX idx_templates_rating ON templates(rating);
+CREATE INDEX idx_templates_is_public ON templates(is_public);
+CREATE INDEX idx_templates_is_recommended ON templates(is_recommended);
+CREATE INDEX idx_templates_deleted_at ON templates(deleted_at);
+
+-- Media table indexes
 CREATE INDEX idx_media_created_at ON media(created_at);
+CREATE INDEX idx_media_updated_at ON media(updated_at);
 
--- Shape table
-CREATE INDEX idx_shape_category ON shape(category);
-CREATE INDEX idx_shape_featured ON shape(featured);
+-- Export jobs table indexes
+CREATE INDEX idx_export_jobs_created_at ON export_jobs(created_at);
+CREATE INDEX idx_export_jobs_status ON export_jobs(status);
+
+-- Layers table indexes
+CREATE INDEX idx_layers_created_at ON layers(created_at);
+
+-- User subscriptions table indexes
+CREATE INDEX idx_user_subscriptions_user_id ON user_subscriptions(user_id);
+CREATE INDEX idx_user_subscriptions_plan_id ON user_subscriptions(plan_id);
+CREATE INDEX idx_user_subscriptions_status ON user_subscriptions(status);
+CREATE INDEX idx_user_subscriptions_created_at ON user_subscriptions(created_at);
+
+-- User integrations table indexes
+CREATE INDEX idx_user_integrations_user_id ON user_integrations(user_id);
+CREATE INDEX idx_user_integrations_service ON user_integrations(service);
+CREATE INDEX idx_user_integrations_created_at ON user_integrations(created_at);
+
+-- Video analysis table indexes
+CREATE INDEX idx_video_analysis_created_at ON video_analysis(created_at);
+CREATE INDEX idx_video_analysis_status ON video_analysis(status);
+
+-- Shapes table indexes
+CREATE INDEX idx_shapes_created_at ON shapes(created_at);
+
+-- Plugins table indexes
+CREATE INDEX idx_plugins_is_active ON plugins(is_active);
+CREATE INDEX idx_plugins_created_at ON plugins(created_at);
 EOF
 
     # Ignore errors from duplicate indexes
