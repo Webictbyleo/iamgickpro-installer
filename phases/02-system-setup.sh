@@ -235,27 +235,73 @@ install_composer() {
 install_nodejs() {
     print_step "Installing Node.js $NODE_VERSION"
     
+    # Check if Node.js is already installed and compatible
+    if command -v node &> /dev/null; then
+        local current_version
+        current_version=$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)
+        
+        if [[ "$current_version" == "$NODE_VERSION" ]]; then
+            print_success "Node.js $NODE_VERSION is already installed"
+            local npm_version
+            npm_version=$(npm -v 2>/dev/null || echo "unknown")
+            print_success "npm version: $npm_version"
+            log "Node.js version: $(node -v)"
+            log "npm version: $npm_version"
+            return 0
+        else
+            print_warning "Node.js $current_version found, but need version $NODE_VERSION"
+            print_step "Removing existing Node.js installation"
+            apt-get remove -y nodejs npm 2>/dev/null || true
+            apt-get autoremove -y 2>/dev/null || true
+        fi
+    fi
+    
+    # Remove any existing NodeSource repository to avoid conflicts
+    print_step "Cleaning up existing Node.js repositories"
+    rm -f /etc/apt/sources.list.d/nodesource.list* 2>/dev/null || true
+    
     # Install Node.js using NodeSource repository
-    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | sudo -E bash - &
-    spinner
-    wait $!
+    print_step "Setting up NodeSource repository for Node.js $NODE_VERSION"
+    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - 2>/dev/null
     
-    $PKG_INSTALL nodejs &
-    spinner
-    wait $!
-    
-    # Verify installation
-    if ! command -v node &> /dev/null; then
+    print_step "Installing Node.js $NODE_VERSION"
+    if ! $PKG_INSTALL nodejs; then
         print_error "Node.js installation failed"
         exit 1
     fi
     
-    # Install global packages
-    npm install -g npm@latest &
-    spinner
-    wait $!
+    # Verify installation
+    if ! command -v node &> /dev/null; then
+        print_error "Node.js command not found after installation"
+        exit 1
+    fi
     
-    print_success "Node.js $NODE_VERSION installed"
+    # Verify npm is working
+    if ! command -v npm &> /dev/null; then
+        print_error "npm command not found after installation"
+        exit 1
+    fi
+    
+    # Test npm functionality
+    print_step "Testing npm functionality"
+    if npm --version &>/dev/null; then
+        print_success "npm is working correctly"
+    else
+        print_warning "npm may have compatibility issues, attempting to fix"
+        
+        # Try to reinstall npm compatible with current Node.js version
+        local node_major
+        node_major=$(node -v | sed 's/v//' | cut -d. -f1)
+        
+        if [[ "$node_major" -ge 22 ]]; then
+            print_step "Installing latest npm for Node.js $node_major"
+            npm install -g npm@latest 2>/dev/null || {
+                print_warning "Failed to update npm, using system npm"
+            }
+        fi
+    fi
+    
+    print_success "Node.js $NODE_VERSION installed successfully"
     log "Node.js version: $(node -v)"
     log "npm version: $(npm -v)"
 }
@@ -401,9 +447,30 @@ configure_firewall() {
     print_success "Firewall configured"
 }
 
+# Clean up problematic repositories
+cleanup_repositories() {
+    print_step "Cleaning up problematic repositories"
+    
+    # Remove webmin repository if it exists and is causing issues
+    if [[ -f /etc/apt/sources.list.d/webmin.list ]]; then
+        print_step "Removing problematic webmin repository"
+        rm -f /etc/apt/sources.list.d/webmin.list
+    fi
+    
+    # Clean up any legacy trusted keys
+    if [[ -f /etc/apt/trusted.gpg ]]; then
+        print_step "Cleaning up legacy apt keys"
+        # Remove the problematic DSA1024 key if it exists
+        apt-key del 1719003ACE3E5A41E2DE70DFD97A3AE911F63C51 2>/dev/null || true
+    fi
+    
+    print_success "Repository cleanup completed"
+}
+
 # Main system setup function
 setup_system() {
     detect_package_manager
+    cleanup_repositories
     update_system
     install_basic_dependencies
     add_php_repository

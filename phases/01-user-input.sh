@@ -137,13 +137,13 @@ collect_user_input() {
     # Set required installation options (no user input needed)
     echo
     echo -e "${CYAN}Installation Configuration:${NC}"
-    echo -e "${CYAN}• Node.js version: ${WHITE}21${NC} (required)"
+    echo -e "${CYAN}• Node.js version: ${WHITE}22${NC} (current LTS)"
     echo -e "${CYAN}• ImageMagick: ${WHITE}Will be compiled from source${NC} (required for image processing)"
     echo -e "${CYAN}• FFmpeg: ${WHITE}Will be compiled from source${NC} (required for video processing)"
     echo
     
     # Set the required values
-    NODE_VERSION="21"
+    NODE_VERSION="22"
     INSTALL_IMAGEMAGICK=true
     INSTALL_FFMPEG=true
     
