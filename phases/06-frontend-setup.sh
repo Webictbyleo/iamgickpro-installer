@@ -57,6 +57,13 @@ setup_frontend() {
     echo "  NPM: $(npm -v)"
     echo "  Working directory: $(pwd)"
     echo "  Package.json exists: $(ls -la package.json 2>/dev/null || echo 'MISSING')"
+    echo "  Package-lock.json exists: $(ls -la package-lock.json 2>/dev/null || echo 'MISSING')"
+    
+    # Show package.json content for debugging
+    echo "  Package.json scripts:"
+    if [[ -f "package.json" ]]; then
+        cat package.json | grep -A 10 '"scripts"' || echo "    No scripts section found"
+    fi
     
     # Install npm dependencies
     print_step "Installing frontend dependencies"
@@ -67,11 +74,11 @@ setup_frontend() {
     # Capture npm output for debugging
     local npm_log_file="${TEMP_DIR}/npm_install.log"
     
-    # Try npm ci first (faster and more reliable for production)
-    print_step "Running npm ci --production..."
+    # Use npm install (includes dev dependencies needed for build)
+    print_step "Running npm install..."
     
     # Set a timeout for npm install (10 minutes)
-    timeout 600 npm ci --production > "$npm_log_file" 2>&1 &
+    timeout 600 npm install > "$npm_log_file" 2>&1 &
     local npm_pid=$!
     spinner
     wait $npm_pid
@@ -83,32 +90,38 @@ setup_frontend() {
         tail -n 50 "$npm_log_file" 2>/dev/null || echo "No output file found"
         return 1
     elif [[ $npm_exit_code -ne 0 ]]; then
-        print_warning "npm ci failed, trying npm install as fallback"
-        echo "npm ci output:"
+        print_error "NPM install failed (exit code: $npm_exit_code)"
+        echo "NPM install output:"
         cat "$npm_log_file"
-        
-        # Fallback to npm install
-        print_step "Running npm install --production..."
-        timeout 600 npm install --production > "$npm_log_file" 2>&1 &
-        local npm_pid2=$!
-        spinner
-        wait $npm_pid2
-        local npm_exit_code2=$?
-        
-        if [[ $npm_exit_code2 -eq 124 ]]; then
-            print_error "NPM install fallback timed out after 10 minutes"
-            echo "Last 50 lines of NPM output:"
-            tail -n 50 "$npm_log_file" 2>/dev/null || echo "No output file found"
-            return 1
-        elif [[ $npm_exit_code2 -ne 0 ]]; then
-            print_error "Both npm ci and npm install failed (exit code: $npm_exit_code2)"
-            echo "npm install output:"
-            cat "$npm_log_file"
-            return 1
-        fi
+        return 1
     fi
     
     print_success "Frontend dependencies installed"
+    
+    # Verify node_modules was created and contains essential packages
+    print_step "Validating dependency installation"
+    
+    if [[ ! -d "node_modules" ]]; then
+        print_error "node_modules directory not created"
+        return 1
+    fi
+    
+    # Check for key dependencies
+    local missing_deps=()
+    local key_deps=("vue" "vite" "typescript" "@vitejs/plugin-vue")
+    
+    for dep in "${key_deps[@]}"; do
+        if [[ ! -d "node_modules/$dep" ]]; then
+            missing_deps+=("$dep")
+        fi
+    done
+    
+    if [[ ${#missing_deps[@]} -gt 0 ]]; then
+        print_warning "Some key dependencies may be missing: ${missing_deps[*]}"
+        echo "  This might cause build issues"
+    else
+        print_success "Key dependencies verified"
+    fi
     
     # Build frontend for production
     print_step "Building frontend application"
