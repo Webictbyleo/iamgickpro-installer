@@ -20,7 +20,7 @@ check_cached_config() {
         echo -e "${CYAN}Database User:${NC} ${DB_USER:-'(not set)'}"
         echo -e "${CYAN}Admin Email:${NC} ${ADMIN_EMAIL:-'(not set)'}"
         echo -e "${CYAN}App Name:${NC} ${APP_NAME:-'IAMGickPro'}"
-        echo -e "${CYAN}Node.js:${NC} ${NODE_VERSION:-'22'}"
+        echo -e "${CYAN}Node.js:${NC} ${NODE_VERSION:-'21'}"
         echo -e "${CYAN}Last Updated:${NC} $(date -r "$cached_config" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo 'unknown')"
         echo
         
@@ -220,13 +220,13 @@ collect_user_input() {
     # Set required installation options (no user input needed)
     echo
     echo -e "${CYAN}Installation Configuration:${NC}"
-    echo -e "${CYAN}• Node.js version: ${WHITE}22${NC} (current LTS)"
+    echo -e "${CYAN}• Node.js version: ${WHITE}21${NC} (LTS)"
     echo -e "${CYAN}• ImageMagick: ${WHITE}Will be compiled from source${NC} (required for image processing)"
     echo -e "${CYAN}• FFmpeg: ${WHITE}Will be compiled from source${NC} (required for video processing)"
     echo
     
     # Set the required values
-    NODE_VERSION="22"
+    NODE_VERSION="21"
     INSTALL_IMAGEMAGICK=true
     INSTALL_FFMPEG=true
     

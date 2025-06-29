@@ -84,8 +84,47 @@ import_content() {
         print_step "Installing template importer dependencies"
         
         # Check Node.js version
-        NODE_VERSION=$(node --version 2>/dev/null || echo "not found")
-        print_step "Node.js version: $NODE_VERSION"
+        CURRENT_NODE_VERSION=$(node --version 2>/dev/null || echo "not found")
+        CURRENT_NODE_MAJOR=$(echo "$CURRENT_NODE_VERSION" | sed 's/v//' | cut -d. -f1)
+        print_step "Node.js version: $CURRENT_NODE_VERSION"
+        
+        # Warn if using a different Node.js version than expected
+        if [[ "$CURRENT_NODE_MAJOR" != "$NODE_VERSION" ]]; then
+            print_warning "Expected Node.js $NODE_VERSION but found $CURRENT_NODE_VERSION"
+            print_warning "This may cause compatibility issues with canvas package"
+            
+            # Check if the correct Node.js version is available
+            if command -v "node$NODE_VERSION" &> /dev/null; then
+                print_step "Using node$NODE_VERSION instead"
+                alias node="node$NODE_VERSION"
+                alias npm="npm$NODE_VERSION"
+            elif [[ -f "/usr/bin/node$NODE_VERSION" ]]; then
+                print_step "Using /usr/bin/node$NODE_VERSION instead"
+                export PATH="/usr/bin:$PATH"
+                alias node="node$NODE_VERSION"
+                alias npm="npm$NODE_VERSION"
+            fi
+        fi
+        
+        # Install native dependencies required for canvas package
+        print_step "Installing native dependencies for canvas package"
+        apt-get update -qq > /dev/null 2>&1
+        apt-get install -y \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev \
+            libffi-dev \
+            pkg-config > /dev/null 2>&1
+        
+        if [[ $? -eq 0 ]]; then
+            print_success "Native dependencies installed"
+        else
+            print_warning "Some native dependencies may have failed to install"
+        fi
         
         # Check if node_modules already exists
         if [[ -d "node_modules" ]]; then
@@ -93,7 +132,7 @@ import_content() {
         else
             # Run npm install with timeout and error handling
             print_step "Installing Node.js dependencies (this may take a few minutes)"
-             npm install 2>&1
+            timeout 300 npm install 2>&1
             npm_exit_code=$?
             
             if [[ $npm_exit_code -eq 124 ]]; then

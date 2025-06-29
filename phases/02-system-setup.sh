@@ -325,7 +325,7 @@ install_nodejs() {
         local node_major
         node_major=$(node -v | sed 's/v//' | cut -d. -f1)
         
-        if [[ "$node_major" -ge 22 ]]; then
+        if [[ "$node_major" -ge 18 ]]; then
             print_step "Installing latest npm for Node.js $node_major"
             npm install -g npm@latest 2>/dev/null || {
                 print_warning "Failed to update npm, using system npm"

@@ -18,7 +18,7 @@ setup_frontend() {
     # Install Node.js if not available or wrong version
     print_step "Checking Node.js installation"
     
-    if ! command -v node &> /dev/null || [[ "$(node -v | cut -d'v' -f2 | cut -d'.' -f1)" -lt 18 ]]; then
+    if ! command -v node &> /dev/null || [[ "$(node -v | cut -d'v' -f2 | cut -d'.' -f1)" -ne "$NODE_VERSION" ]]; then
         print_step "Installing Node.js $NODE_VERSION"
         
         # Install Node.js using NodeSource repository
