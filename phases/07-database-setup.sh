@@ -88,19 +88,47 @@ EOF
     
     print_success "Application database connection verified"
     
-    # Run database migrations
-    print_step "Running database migrations"
+    # Run database migrations or create schema
+    print_step "Setting up database schema"
     
-    php bin/console doctrine:migrations:migrate --no-interaction --env=prod &
-    spinner
-    wait $!
-    
-    if [[ $? -ne 0 ]]; then
-        print_error "Database migrations failed"
-        return 1
+    # Check if migration files exist
+    if [[ -d "migrations" ]] && [[ -n "$(ls -A migrations/ 2>/dev/null | grep -E '\.php$')" ]]; then
+        print_step "Found migration files, running migrations"
+        
+        php bin/console doctrine:migrations:migrate --no-interaction --env=prod 2>&1
+        migration_result=$?
+        
+        if [[ $migration_result -ne 0 ]]; then
+            print_warning "Migration failed, attempting to create schema directly"
+            
+            # Clear any partial schema and recreate
+            php bin/console doctrine:schema:drop --force --env=prod 2>/dev/null || true
+            php bin/console doctrine:schema:create --env=prod 2>&1
+            schema_result=$?
+            
+            if [[ $schema_result -ne 0 ]]; then
+                print_error "Failed to create database schema"
+                return 1
+            fi
+            
+            print_success "Database schema created directly"
+        else
+            print_success "Database migrations completed"
+        fi
+    else
+        print_step "No migration files found, creating schema directly"
+        
+        # Create schema using Doctrine entities
+        php bin/console doctrine:schema:create --env=prod 2>&1
+        schema_result=$?
+        
+        if [[ $schema_result -ne 0 ]]; then
+            print_error "Failed to create database schema"
+            return 1
+        fi
+        
+        print_success "Database schema created from entities"
     fi
-    
-    print_success "Database migrations completed"
     
     # Verify database schema
     print_step "Verifying database schema"
@@ -125,6 +153,22 @@ EOF
     done
     
     print_success "Database schema verification completed"
+    
+    # Load initial data if fixtures exist
+    print_step "Loading initial data"
+    
+    # Check if fixtures command exists and fixtures are available
+    if php bin/console list --env=prod | grep -q "doctrine:fixtures:load" 2>/dev/null; then
+        print_step "Loading database fixtures"
+        php bin/console doctrine:fixtures:load --no-interaction --env=prod 2>&1
+        if [[ $? -eq 0 ]]; then
+            print_success "Database fixtures loaded"
+        else
+            print_warning "Failed to load fixtures, continuing with empty database"
+        fi
+    else
+        print_step "No fixtures available, database ready for use"
+    fi
     
     # Create database indexes for performance (if not created by migrations)
     print_step "Optimizing database performance"
