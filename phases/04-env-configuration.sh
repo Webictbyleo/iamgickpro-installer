@@ -49,6 +49,7 @@ MESSENGER_TRANSPORT_DSN=doctrine://default
 # External Services
 UNSPLASH_ACCESS_KEY="$UNSPLASH_API_KEY"
 ICONFINDER_API_KEY="$ICONFINDER_API_KEY"
+PEXELS_API_KEY=""
 
 # Media Processing
 IMAGEMAGICK_PATH=/usr/local/bin/convert
