@@ -7,7 +7,7 @@ import_content() {
     print_step "Importing application content"
     
     local backend_dir="$INSTALL_DIR/backend"
-    local shapes_dir="$TEMP_DIR/design-vector-shapes"
+    local shapes_dir="$TEMP_DIR/shapes"
     local scripts_dir="$TEMP_DIR/iamgickpro/scripts"
     
     cd "$backend_dir"
@@ -19,6 +19,24 @@ import_content() {
         print_error "Shapes directory not found: $shapes_dir"
         return 1
     fi
+    
+    # Copy shapes to backend storage directory (required by import service)
+    print_step "Copying shapes to backend storage"
+    
+    mkdir -p storage/shapes
+    
+    # Remove existing shapes if any
+    if [[ -d "storage/shapes" ]]; then
+        rm -rf storage/shapes/*
+    fi
+    
+    # Copy all content from temp shapes directory
+    cp -r "$shapes_dir"/* storage/shapes/ 2>/dev/null || {
+        print_error "Failed to copy shapes to storage directory"
+        return 1
+    }
+    
+    print_success "Shapes copied to backend storage"
     
     # Run the shape import command
     php bin/console app:shapes:import --force --env=prod &
@@ -35,7 +53,7 @@ import_content() {
     # Verify shape import
     print_step "Verifying shape import"
     
-    SHAPE_COUNT=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -se "SELECT COUNT(*) FROM shape;")
+    SHAPE_COUNT=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -se "SELECT COUNT(*) FROM shapes;")
     
     if [[ $SHAPE_COUNT -eq 0 ]]; then
         print_warning "No shapes were imported"
@@ -83,7 +101,7 @@ import_content() {
     
     cd "$backend_dir"
     
-    TEMPLATE_COUNT=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -se "SELECT COUNT(*) FROM template;")
+    TEMPLATE_COUNT=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -se "SELECT COUNT(*) FROM templates;")
     
     if [[ $TEMPLATE_COUNT -eq 0 ]]; then
         print_warning "No templates were imported"
