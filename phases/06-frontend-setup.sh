@@ -69,7 +69,10 @@ setup_frontend() {
     
     # Copy frontend source to temporary build location
     mkdir -p "$frontend_build_dir"
+    # Copy all files including hidden files like .env
+    shopt -s dotglob
     cp -r "$frontend_source/"* "$frontend_build_dir/"
+    shopt -u dotglob
     
     cd "$frontend_build_dir"
     
@@ -382,7 +385,7 @@ EOF
     
     # Cleanup temporary build directory
     print_step "Cleaning up build files"
-   # rm -rf "$frontend_build_dir"
+     rm -rf "$frontend_build_dir"
     print_success "Build cleanup completed"
 }
 
