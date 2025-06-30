@@ -30,13 +30,6 @@ setup_frontend() {
             echo "$current_hash" > "$TEMP_DIR/.frontend_hash"
             print_success "Frontend hash cache updated"
             
-            # Ensure .env file is in frontend source for future builds
-            local env_source="$TEMP_DIR/.env"
-            if [[ -f "$env_source" ]] && [[ ! -f "$frontend_source/.env" ]]; then
-                cp "$env_source" "$frontend_source/.env" || true
-                print_success ".env file ensured in frontend source for future builds"
-            fi
-            
             return 0
         else
             print_warning "Frontend marked as unchanged but missing files detected - forcing build"
@@ -69,21 +62,6 @@ setup_frontend() {
     
     # Copy frontend source to temporary build location (not install directory)
     print_step "Preparing frontend build"
-    
-    # Ensure .env file is present in frontend source directory
-    local env_source="$TEMP_DIR/.env"
-    if [[ -f "$env_source" ]]; then
-        if [[ ! -f "$frontend_source/.env" ]]; then
-            cp "$env_source" "$frontend_source/.env" || {
-                print_error "Failed to copy .env to frontend source directory"
-                exit 1
-            }
-            print_success ".env file copied to frontend source directory"
-        fi
-    else
-        print_error ".env file not found in temp directory: $env_source"
-        exit 1
-    fi
     
     local frontend_build_dir="$TEMP_DIR/frontend-build"
     
