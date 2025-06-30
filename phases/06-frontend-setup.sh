@@ -15,16 +15,6 @@ setup_frontend() {
         return 1
     fi
     
-    # Verify .env file exists in source directory (created by Phase 04)
-    if [[ -f "$frontend_source/.env" ]]; then
-        print_success "Frontend .env file found at: $frontend_source/.env"
-    else
-        print_error "Frontend .env file not found in source directory - Phase 04 environment configuration may have failed"
-        print_error "Expected .env file location: $frontend_source/.env"
-        print_error "Please ensure Phase 04 (environment configuration) completed successfully"
-        return 1
-    fi
-    
     # Check if frontend build is needed based on change detection
     if [[ "${FRONTEND_CHANGED:-true}" == "false" ]]; then
         print_step "Frontend unchanged - skipping build and using existing files"
@@ -33,11 +23,19 @@ setup_frontend() {
         if [[ -f "$webroot/index.html" ]] && [[ -d "$webroot/assets" ]]; then
             print_success "Existing frontend files verified - build skipped"
             
-            # Still update the hash cache in case repository was updated
-            cd "$frontend_source/.."
-            source "$SCRIPT_DIR/phases/03-clone-repository.sh"
-            update_frontend_hash
-            cd - > /dev/null
+            # Update the hash cache without re-cloning the repository
+            print_step "Updating frontend change detection cache"
+            local current_hash=$(cd "$frontend_source" && find . -name "*.vue" -o -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.css" -o -name "*.scss" | \
+                                sort | xargs md5sum 2>/dev/null | md5sum | cut -d' ' -f1)
+            echo "$current_hash" > "$TEMP_DIR/.frontend_hash"
+            print_success "Frontend hash cache updated"
+            
+            # Ensure .env file is in frontend source for future builds
+            local env_source="$TEMP_DIR/.env"
+            if [[ -f "$env_source" ]] && [[ ! -f "$frontend_source/.env" ]]; then
+                cp "$env_source" "$frontend_source/.env" || true
+                print_success ".env file ensured in frontend source for future builds"
+            fi
             
             return 0
         else
@@ -71,6 +69,21 @@ setup_frontend() {
     
     # Copy frontend source to temporary build location (not install directory)
     print_step "Preparing frontend build"
+    
+    # Ensure .env file is present in frontend source directory
+    local env_source="$TEMP_DIR/.env"
+    if [[ -f "$env_source" ]]; then
+        if [[ ! -f "$frontend_source/.env" ]]; then
+            cp "$env_source" "$frontend_source/.env" || {
+                print_error "Failed to copy .env to frontend source directory"
+                exit 1
+            }
+            print_success ".env file copied to frontend source directory"
+        fi
+    else
+        print_error ".env file not found in temp directory: $env_source"
+        exit 1
+    fi
     
     local frontend_build_dir="$TEMP_DIR/frontend-build"
     
@@ -400,10 +413,12 @@ EOF
     
     # Update frontend hash cache after successful build
     print_step "Updating frontend change detection cache"
-    cd "$frontend_source/.."
-    source "$SCRIPT_DIR/phases/03-clone-repository.sh"
-    update_frontend_hash
-    cd - > /dev/null
+    local current_hash=$(cd "$frontend_source" && find . -name "*.vue" -o -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.css" -o -name "*.scss" | \
+                        sort | xargs md5sum 2>/dev/null | md5sum | cut -d' ' -f1)
+    echo "$current_hash" > "$TEMP_DIR/.frontend_hash"
+    print_success "Frontend hash cache updated"
+    
+
     
     # Cleanup temporary build directory
     print_step "Cleaning up build files"
