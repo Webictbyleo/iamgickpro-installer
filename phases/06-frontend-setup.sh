@@ -304,7 +304,7 @@ server {
 
     # Thumbnail routes (serve from backend)
     location /thumbnails/ {
-        root $INSTALL_DIR/backend/public;
+        root $INSTALL_DIR/backend/public/uploads;
         try_files \$uri /index.php\$is_args\$args;
     }
 

@@ -13,8 +13,26 @@ check_cached_config() {
         # Load cached configuration
         source "$cached_config"
         
+        # Handle cached installation directory
+        if [[ -n "${INSTALL_DIR:-}" ]]; then
+            # Validate if cached directory still makes sense
+            local cached_install_dir="$INSTALL_DIR"
+            local parent_dir
+            parent_dir="$(dirname "$cached_install_dir")"
+            
+            if [[ ! -d "$parent_dir" ]] || [[ ! -w "$parent_dir" ]]; then
+                print_warning "Cached installation directory is no longer accessible: $cached_install_dir"
+                print_step "Reverting to default directory: $DEFAULT_INSTALL_DIR"
+                INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+                log "Cached installation directory invalid, using default"
+            else
+                log "Using cached installation directory: $INSTALL_DIR"
+            fi
+        fi
+        
         echo
         echo -e "${CYAN}Cached Configuration Found:${NC}"
+        echo -e "${CYAN}Installation Directory:${NC} ${INSTALL_DIR:-'(using default)'}"
         echo -e "${CYAN}Domain:${NC} ${DOMAIN_NAME:-'(not set)'}"
         echo -e "${CYAN}Database:${NC} ${DB_NAME:-'(not set)'} @ ${DB_HOST:-'localhost'}:${DB_PORT:-'3306'}"
         echo -e "${CYAN}Database User:${NC} ${DB_USER:-'(not set)'}"
@@ -40,6 +58,7 @@ check_cached_config() {
                     log "User chose to reconfigure instead of using cache"
                     
                     # Clear all cached variables to force fresh input (set to empty strings)
+                    INSTALL_DIR="$DEFAULT_INSTALL_DIR"  # Reset to default
                     DOMAIN_NAME=""
                     DB_NAME=""
                     DB_USER=""
@@ -88,6 +107,7 @@ save_config_cache() {
 # Generated: $(date)
 # This file is automatically created and can be safely deleted to force reconfiguration
 
+INSTALL_DIR="$INSTALL_DIR"
 DOMAIN_NAME="$DOMAIN_NAME"
 DB_HOST="$DB_HOST"
 DB_PORT="$DB_PORT"

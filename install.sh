@@ -20,12 +20,15 @@ set -euo pipefail
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 readonly LOG_FILE="/var/log/iamgickpro-install.log"
-readonly INSTALL_DIR="/var/www/html/iamgickpro"
+readonly DEFAULT_INSTALL_DIR="/var/www/html/iamgickpro"
 readonly TEMP_DIR="/tmp/iamgickpro-install"
 readonly CONFIG_CACHE="/var/cache/iamgickpro-installer"
 readonly INSTALLER_REPO_URL="https://github.com/Webictbyleo/iamgickpro-installer.git"
 readonly REPO_URL="https://github.com/Webictbyleo/iamgickpro.git"
 readonly SHAPES_REPO_URL="https://github.com/Webictbyleo/design-vector-shapes.git"
+
+# Installation directory (can be overridden by environment variable or command line)
+INSTALL_DIR="${IAMGICKPRO_INSTALL_DIR:-${CUSTOM_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}}"
 
 # Colors for output
 readonly RED='\033[0;31m'
@@ -357,16 +360,238 @@ check_system() {
     print_success "System requirements check passed"
 }
 
-# Create installation directories
+# Simple validation for installation directory
+validate_install_directory() {
+    print_step "Validating installation directory: $INSTALL_DIR"
+    
+    # Check if directory path is absolute
+    if [[ "${INSTALL_DIR:0:1}" != "/" ]]; then
+        print_error "Installation directory must be an absolute path"
+        exit 1
+    fi
+    
+    # Check parent directory exists and is writable
+    local parent_dir
+    parent_dir="$(dirname "$INSTALL_DIR")"
+    
+    if [[ ! -d "$parent_dir" ]]; then
+        print_error "Parent directory does not exist: $parent_dir"
+        exit 1
+    fi
+    
+    if [[ ! -w "$parent_dir" ]]; then
+        print_error "Parent directory is not writable: $parent_dir"
+        exit 1
+    fi
+    
+    # Check available disk space (require at least 2GB)
+    local available_space
+    available_space=$(df "$parent_dir" | awk 'NR==2 {print $4}')
+    local required_space=$((2 * 1024 * 1024)) # 2GB in KB
+    
+    if [[ "$available_space" -lt "$required_space" ]]; then
+        print_error "Insufficient disk space in $parent_dir"
+        print_error "Required: 2GB, Available: $(($available_space / 1024 / 1024))GB"
+        exit 1
+    fi
+    
+    # Handle existing installation
+    if [[ -d "$INSTALL_DIR" ]]; then
+        handle_existing_installation
+    fi
+    
+    print_success "Installation directory validated: $INSTALL_DIR"
+}
+
+# Handle existing installation (simplified)
+handle_existing_installation() {
+    print_warning "Directory already exists: $INSTALL_DIR"
+    
+    # Check if directory is empty
+    local file_count
+    file_count=$(find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+    
+    if [[ "$file_count" -eq 0 ]]; then
+        print_step "Directory is empty, proceeding with installation"
+        return 0
+    fi
+    
+    # Force reinstall mode
+    if [[ "${FORCE_REINSTALL:-false}" == "true" ]]; then
+        print_warning "Force reinstall mode - removing existing installation"
+        backup_existing_installation
+        rm -rf "$INSTALL_DIR"
+        return 0
+    fi
+    
+    # Interactive handling
+    echo
+    echo -e "${YELLOW}Directory contains files.${NC}"
+    echo
+    echo "Options:"
+    echo "1) Backup existing files and proceed with installation"
+    echo "2) Choose a different directory"
+    echo "3) Exit (recommended - backup manually first)"
+    echo
+    
+    while true; do
+        printf "Choose option (1-3): "
+        read -r choice </dev/tty
+        echo
+        
+        case $choice in
+            1)
+                print_step "Creating backup and proceeding with installation"
+                backup_existing_installation
+                rm -rf "$INSTALL_DIR"
+                break
+                ;;
+            2)
+                prompt_for_existing_directory
+                validate_install_directory
+                break
+                ;;
+            3)
+                print_step "Installation cancelled"
+                echo -e "${CYAN}To manually backup your installation:${NC}"
+                echo "sudo cp -r '$INSTALL_DIR' '$INSTALL_DIR.backup.$(date +%Y%m%d_%H%M%S)'"
+                exit 0
+                ;;
+            *)
+                echo "Please choose option 1, 2, or 3"
+                ;;
+        esac
+    done
+}
+
+# Create backup of existing installation
+backup_existing_installation() {
+    local backup_dir="$INSTALL_DIR.backup.$(date +%Y%m%d_%H%M%S)"
+    
+    print_step "Creating backup: $backup_dir"
+    
+    if cp -r "$INSTALL_DIR" "$backup_dir" 2>/dev/null; then
+        print_success "Backup created successfully"
+        log "Backup created: $backup_dir"
+        
+        # Also backup database if possible
+        if [[ -f "$INSTALL_DIR/.env" ]]; then
+            source "$INSTALL_DIR/.env" 2>/dev/null || true
+            if [[ -n "${DB_NAME:-}" ]] && [[ -n "${DB_USER:-}" ]] && command -v mysqldump &> /dev/null; then
+                print_step "Creating database backup"
+                local db_backup="$backup_dir/database_backup.sql"
+                if mysqldump -u"${DB_USER}" -p"${DB_PASSWORD:-}" "${DB_NAME}" > "$db_backup" 2>/dev/null; then
+                    print_success "Database backup created: $db_backup"
+                else
+                    print_warning "Database backup failed (will continue anyway)"
+                fi
+            fi
+        fi
+        
+        echo -e "${GREEN}Backup location: $backup_dir${NC}"
+        echo
+    else
+        print_error "Failed to create backup"
+        print_error "Please manually backup your installation before proceeding"
+        exit 1
+    fi
+}
+
+# Prompt for existing directory
+prompt_for_existing_directory() {
+    echo
+    echo -e "${CYAN}Installation Directory Requirements:${NC}"
+    echo "• Must be an existing directory"
+    echo "• Must be writable by the current user"
+    echo "• Will create 'iamgickpro' subdirectory inside"
+    echo
+    
+    while true; do
+        printf "Enter existing directory path (or 'default' for $DEFAULT_INSTALL_DIR): "
+        
+        # Enable readline for better input experience
+        if [[ -t 0 ]]; then
+            read -e -r user_dir </dev/tty
+        else
+            read -r user_dir </dev/tty
+        fi
+        
+        # Handle default option
+        if [[ "$user_dir" == "default" ]] || [[ -z "$user_dir" ]]; then
+            INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+            print_step "Using default: $INSTALL_DIR"
+            break
+        fi
+        
+        # Expand ~ to home directory if present
+        user_dir="${user_dir/#\~/$HOME}"
+        
+        # Make path absolute if relative
+        if [[ "${user_dir:0:1}" != "/" ]]; then
+            user_dir="$(pwd)/$user_dir"
+        fi
+        
+        # Normalize path
+        user_dir="$(realpath -m "$user_dir" 2>/dev/null || echo "$user_dir")"
+        
+        # Check if directory exists
+        if [[ ! -d "$user_dir" ]]; then
+            print_error "Directory does not exist: $user_dir"
+            echo "Please enter an existing directory path."
+            continue
+        fi
+        
+        # Check if directory is writable
+        if [[ ! -w "$user_dir" ]]; then
+            print_error "Directory is not writable: $user_dir"
+            echo "Please choose a directory you have write access to."
+            continue
+        fi
+        
+        # Set installation directory as subdirectory
+        INSTALL_DIR="$user_dir/iamgickpro"
+        print_step "Will install in: $INSTALL_DIR"
+        break
+    done
+    
+    echo
+}
+
+# Create installation directories with proper permissions
 create_directories() {
     print_step "Creating installation directories"
     
-    mkdir -p "$INSTALL_DIR"
+    # Create main installation directory
+    if [[ ! -d "$INSTALL_DIR" ]]; then
+        if mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+            print_success "Created installation directory: $INSTALL_DIR"
+        else
+            print_error "Failed to create installation directory: $INSTALL_DIR"
+            exit 1
+        fi
+    fi
+    
+    # Set proper ownership if running as root
+    if [[ $EUID -eq 0 ]] && [[ -d "$INSTALL_DIR" ]]; then
+        # Set ownership to www-data for web server access
+        if id "www-data" &>/dev/null; then
+            chown -R www-data:www-data "$INSTALL_DIR" 2>/dev/null || true
+            print_success "Set www-data ownership on installation directory"
+        fi
+    fi
+    
+    # Create other required directories
     mkdir -p "$TEMP_DIR"
-    mkdir -p "$CONFIG_CACHE"
+    mkdir -p "$CONFIG_CACHE" 
     mkdir -p "$(dirname "$LOG_FILE")"
     
-    print_success "Directories created"
+    # Ensure log file is writable
+    touch "$LOG_FILE" 2>/dev/null || {
+        print_error "Cannot create log file: $LOG_FILE"
+        exit 1
+    }
+    
+    print_success "All directories created successfully"
 }
 
 # Show welcome message and get user consent
@@ -449,18 +674,35 @@ show_help() {
     echo "Usage: sudo ./install.sh [OPTIONS]"
     echo
     echo "Options:"
-    echo "  -h, --help          Show this help message"
-    echo "  --clear-cache       Clear cached configuration and start fresh"
-    echo "  --show-cache        Display current cached configuration"
-    echo "  --force-reinstall   Force reinstallation of all components"
-    echo "  --update-installer  Force update the installer to latest version"
-    echo "  --skip-update-check Skip checking for installer updates"
+    echo "  -h, --help               Show this help message"
+    echo "  -d, --install-dir DIR    Set custom installation directory"
+    echo "  --install-dir=DIR        Set custom installation directory (alternative syntax)"
+    echo "  --clear-cache            Clear cached configuration and start fresh"
+    echo "  --show-cache             Display current cached configuration"
+    echo "  --force-reinstall        Force reinstallation of all components"
+    echo "  --update-installer       Force update the installer to latest version"
+    echo "  --skip-update-check      Skip checking for installer updates"
+    echo "  --unattended             Run in unattended mode (no interactive prompts)"
+    echo
+    echo "Environment Variables:"
+    echo "  IAMGICKPRO_INSTALL_DIR   Set installation directory via environment"
+    echo "  FORCE_REINSTALL          Set to 'true' to force reinstallation"
+    echo "  UNATTENDED_MODE          Set to 'true' for unattended installation"
+    echo
+    echo "Installation Directory Logic:"
+    echo "  • If current directory is a webroot (e.g., /var/www/*), installer will ask"
+    echo "    if you want to install there as a subdirectory"
+    echo "  • Otherwise, installer will prompt for an existing directory"
+    echo "  • Installation creates 'iamgickpro' subdirectory in chosen location"
     echo
     echo "Examples:"
-    echo "  sudo ./install.sh                   # Normal installation"
-    echo "  sudo ./install.sh --clear-cache     # Clear cache and reconfigure"
-    echo "  sudo ./install.sh --show-cache      # Show cached settings"
-    echo "  sudo ./install.sh --update-installer # Force installer update"
+    echo "  sudo ./install.sh                                    # Interactive installation"
+    echo "  sudo ./install.sh --install-dir /var/www/html        # Install in /var/www/html/iamgickpro"
+    echo "  sudo ./install.sh --clear-cache                      # Clear cache and reconfigure"
+    echo "  IAMGICKPRO_INSTALL_DIR=/opt/web ./install.sh         # Environment variable"
+    echo
+    echo "Default installation directory: $DEFAULT_INSTALL_DIR"
+    echo "Current installation directory: $INSTALL_DIR"
     echo
 }
 
@@ -471,6 +713,23 @@ handle_arguments() {
             -h|--help)
                 show_help
                 exit 0
+                ;;
+            -d|--install-dir)
+                if [[ -n "$2" && "$2" != -* ]]; then
+                    INSTALL_DIR="$2"
+                    export INSTALL_DIR_SPECIFIED=true
+                    print_step "Installation directory set to: $INSTALL_DIR"
+                    shift 2
+                else
+                    print_error "--install-dir requires a directory path"
+                    exit 1
+                fi
+                ;;
+            --install-dir=*)
+                INSTALL_DIR="${1#*=}"
+                export INSTALL_DIR_SPECIFIED=true
+                print_step "Installation directory set to: $INSTALL_DIR"
+                shift
                 ;;
             --clear-cache)
                 print_step "Clearing cached configuration"
@@ -506,6 +765,10 @@ handle_arguments() {
                 export SKIP_UPDATE_CHECK=true
                 print_step "Skipping installer update check"
                 ;;
+            --unattended)
+                export UNATTENDED_MODE=true
+                print_step "Unattended installation mode enabled"
+                ;;
             *)
                 print_error "Unknown option: $1"
                 echo "Use --help for usage information"
@@ -516,6 +779,72 @@ handle_arguments() {
     done
 }
 
+# Simple installation directory selection
+configure_installation_directory() {
+    # If directory was specified via command line, validate and proceed
+    if [[ "${INSTALL_DIR_SPECIFIED:-false}" == "true" ]]; then
+        print_step "Using command-line specified directory: $INSTALL_DIR"
+        validate_install_directory
+        return 0
+    fi
+    
+    # If in unattended mode, use current directory
+    if [[ "${UNATTENDED_MODE:-false}" == "true" ]]; then
+        print_step "Unattended mode: Using directory: $INSTALL_DIR"
+        validate_install_directory
+        return 0
+    fi
+    
+    # Check if current working directory is a webroot directory
+    local current_dir="$(pwd)"
+    local is_webroot=false
+    
+    # Common webroot patterns
+    if [[ "$current_dir" == "/var/www"* ]] || \
+       [[ "$current_dir" == "/usr/share/nginx"* ]] || \
+       [[ "$current_dir" == "/opt/lampp/htdocs"* ]] || \
+       [[ "$current_dir" == "/home/*/public_html"* ]]; then
+        is_webroot=true
+    fi
+    
+    echo
+    print_step "Installation Directory Selection"
+    echo
+    echo -e "${CYAN}Current working directory: ${YELLOW}$current_dir${NC}"
+    echo -e "${CYAN}Default installation directory: ${YELLOW}$DEFAULT_INSTALL_DIR${NC}"
+    echo
+    
+    if [[ "$is_webroot" == "true" ]]; then
+        echo -e "${GREEN}✓ Current directory appears to be a webroot directory${NC}"
+        echo
+        while true; do
+            printf "Install IAMGickPro in current directory ($current_dir/iamgickpro)? (Y/n): "
+            read -r REPLY </dev/tty
+            echo
+            case $REPLY in
+                [Yy]*|"") 
+                    INSTALL_DIR="$current_dir/iamgickpro"
+                    print_step "Installing in: $INSTALL_DIR"
+                    break
+                    ;;
+                [Nn]*) 
+                    prompt_for_existing_directory
+                    break
+                    ;;
+                *) 
+                    echo "Please answer yes (y) or no (n)." 
+                    ;;
+            esac
+        done
+    else
+        echo -e "${YELLOW}Current directory is not a typical webroot directory${NC}"
+        echo "Please provide an existing directory where IAMGickPro should be installed:"
+        prompt_for_existing_directory
+    fi
+    
+    validate_install_directory
+}
+
 # Main installation orchestrator
 main() {
     # Handle command line arguments first
@@ -523,6 +852,11 @@ main() {
     
     # Initialize
     check_root
+    
+    # Configure installation directory early
+    configure_installation_directory
+    
+    # Now create directories with the validated install directory
     create_directories
     ensure_installer_complete
     check_system
