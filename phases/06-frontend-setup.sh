@@ -14,6 +14,18 @@ setup_frontend() {
         print_error "Frontend source directory not found: $frontend_source"
         return 1
     fi
+
+     echo "  .env file exists: $(ls -la .env 2>/dev/null || echo 'MISSING')"
+    
+    # Verify .env file exists (created by Phase 04)
+    if [[ ! -f ".env" ]]; then
+        print_error "Frontend .env file not found - Phase 04 environment configuration may have failed"
+        print_error "Expected .env file location: $(pwd)/.env"
+        print_error "Please ensure Phase 04 (environment configuration) completed successfully"
+        return 1
+    fi
+    
+    print_success "Frontend .env file verified"
     
     # Check if frontend build is needed based on change detection
     if [[ "${FRONTEND_CHANGED:-true}" == "false" ]]; then
@@ -89,6 +101,7 @@ setup_frontend() {
     echo "  Working directory: $(pwd)"
     echo "  Package.json exists: $(ls -la package.json 2>/dev/null || echo 'MISSING')"
     echo "  Package-lock.json exists: $(ls -la package-lock.json 2>/dev/null || echo 'MISSING')"
+   
     
     # Show package.json content for debugging
     echo "  Package.json scripts:"
