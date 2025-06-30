@@ -184,10 +184,7 @@ import_content() {
     
     # Run the template import with timeout and better error handling
     print_step "Starting template import (this may take several minutes)"
-    print_step "Database URL: mysql://$DB_USER:***@$DB_HOST:$DB_PORT/$DB_NAME"
-    print_step "Backend directory: $backend_dir"
-    print_step "Upload directory: $backend_dir/public/uploads/templates"
-    timeout 600 node advanced-template-importer.js --category "youtube cover" --force --clear-existing --limit 1  --backend-dir="$backend_dir"
+    timeout 600 node advanced-template-importer.js --category "youtube cover" --force --clear-existing  --backend-dir="$backend_dir"
     import_exit_code=$?
     
     if [[ $import_exit_code -eq 124 ]]; then

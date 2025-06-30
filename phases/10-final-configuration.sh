@@ -255,7 +255,7 @@ EOF
 
     print_success "Installation summary generated: /root/iamgickpro-installation-summary.txt"
     
-   ## rm -rf "$TEMP_DIR"
+    rm -rf "$TEMP_DIR"
     apt-get autoremove -y &> /dev/null
     apt-get autoclean &> /dev/null
     

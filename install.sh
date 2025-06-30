@@ -579,8 +579,6 @@ main() {
     echo -e "${CYAN}Admin Password:${NC} $ADMIN_PASSWORD"
     echo
     echo -e "${YELLOW}Next Steps:${NC}"
-    echo "1. Configure your DNS to point to this server"
-    echo "2. Set up SSL certificates (recommended: Let's Encrypt)"
     echo "3. Review and customize the application settings"
     echo "4. Start creating amazing designs!"
     echo
