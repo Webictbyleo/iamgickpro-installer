@@ -123,20 +123,7 @@ setup_backend() {
     
     print_success "JWT keys generated and configured"
     
-    # Clear and warm up cache
-    print_step "Optimizing application cache"
-    
-    php bin/console cache:clear --env=prod --no-debug &
-    spinner
-    wait $!
-    
-    php bin/console cache:warmup --env=prod --no-debug &
-    spinner  
-    wait $!
-    
-    print_success "Cache optimized"
-    
-    # Create required directories
+    # Create required directories first
     print_step "Creating required directories"
     
     mkdir -p var/log
@@ -146,7 +133,7 @@ setup_backend() {
     mkdir -p public/uploads/media
     mkdir -p storage/shapes
     
-    # Set proper permissions for runtime directories
+    # Set proper permissions for runtime directories BEFORE cache operations
     chown -R www-data:www-data var/
     chown -R www-data:www-data public/uploads/
     chown -R www-data:www-data storage/
@@ -154,7 +141,20 @@ setup_backend() {
     chmod -R 775 public/uploads/
     chmod -R 775 storage/
     
-    print_success "Required directories created"
+    # Clear and warm up cache as www-data user
+    print_step "Optimizing application cache"
+    
+    sudo -u www-data php bin/console cache:clear --env=prod --no-debug &
+    spinner
+    wait $!
+    
+    sudo -u www-data php bin/console cache:warmup --env=prod --no-debug &
+    spinner  
+    wait $!
+    
+    print_success "Cache optimized"
+    
+    print_success "Required directories created and permissions set"
     
     # Validate backend setup
     print_step "Validating backend installation"

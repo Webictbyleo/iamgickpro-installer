@@ -57,24 +57,25 @@ final_configuration() {
     
     print_success "Initial file permissions configured"
     
-    # Clear and regenerate cache with proper ownership
-    print_step "Clearing and warming up cache"
+    # Ensure cache permissions are correct and refresh if needed
+    print_step "Verifying cache configuration"
     
-    # Remove existing cache if it exists
-    rm -rf "$backend_dir/var/cache/prod" || true
-    
-    # Clear and warm cache as www-data user
-    sudo -u www-data php bin/console cache:clear --env=prod
-    sudo -u www-data php bin/console cache:warmup --env=prod
-    
-    # Optimize composer autoloader
-    composer dump-autoload --optimize --no-dev
-    
-    # Ensure proper ownership after cache operations
+    # Ensure proper ownership of var directory
     chown -R www-data:www-data "$backend_dir/var"
     chmod -R 775 "$backend_dir/var"
     
-    print_success "Cache configured with proper permissions"
+    # Only regenerate cache if it doesn't exist or has wrong ownership
+    if [[ ! -d "$backend_dir/var/cache/prod" ]] || [[ $(stat -c %U "$backend_dir/var/cache/prod" 2>/dev/null) != "www-data" ]]; then
+        print_step "Regenerating cache with proper ownership"
+        rm -rf "$backend_dir/var/cache/prod" || true
+        sudo -u www-data php bin/console cache:clear --env=prod --no-warmup
+        sudo -u www-data php bin/console cache:warmup --env=prod
+    fi
+    
+    # Final composer optimization
+    composer dump-autoload --optimize --no-dev
+    
+    print_success "Cache configuration verified"
     
     # Start background worker service
     print_step "Starting background services"
