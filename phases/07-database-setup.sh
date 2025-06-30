@@ -58,9 +58,27 @@ setup_database() {
             return 1
         fi
         
-        print_success "Existing database cleared"
+        print_success "Existing database dropped successfully"
         log "Database '$DB_NAME' dropped for clean reinstall (CLEAR_DATABASE=true)"
-        DB_EXISTS=0  # Set to 0 so we create it fresh below
+        
+        # Create fresh database immediately
+        print_step "Creating fresh database: $DB_NAME"
+        mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_ADMIN_USER" -p"$DB_ADMIN_PASSWORD" -e "CREATE DATABASE \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+        
+        if [[ $? -ne 0 ]]; then
+            print_error "Failed to create fresh database: $DB_NAME"
+            return 1
+        fi
+        
+        print_success "Fresh database created: $DB_NAME"
+        log "Fresh database '$DB_NAME' created after clean reinstall"
+        DB_EXISTS=1  # Set to 1 since we just created it
+        DATABASE_WAS_CLEARED=true
+    elif [[ "${CLEAR_DATABASE:-false}" == "true" ]] && [[ $DB_EXISTS -eq 0 ]]; then
+        print_step "Clean reinstall requested but database doesn't exist - will create fresh"
+        DATABASE_WAS_CLEARED=true
+    else
+        DATABASE_WAS_CLEARED=false
     fi
     
     if [[ $DB_EXISTS -eq 0 ]]; then
@@ -146,27 +164,41 @@ EOF
     else
         print_step "No migration files found, creating schema directly"
         
-        # Use schema:update which handles existing tables gracefully
-        print_step "Updating database schema to match entities"
-        php bin/console doctrine:schema:update --force --env=prod 2>&1
-        schema_result=$?
-        
-        if [[ $schema_result -ne 0 ]]; then
-            print_warning "Schema update failed, trying to create fresh schema"
-            
-            # If update fails, try to drop and recreate
-            php bin/console doctrine:schema:drop --force --env=prod 2>/dev/null || true
+        # Check if this is a clean database setup (dropped and recreated)
+        if [[ "${DATABASE_WAS_CLEARED:-false}" == "true" ]]; then
+            print_step "Creating fresh database schema for clean install (database was cleared)"
             php bin/console doctrine:schema:create --env=prod 2>&1
             schema_result=$?
             
             if [[ $schema_result -ne 0 ]]; then
-                print_error "Failed to create database schema"
+                print_error "Failed to create fresh database schema"
                 return 1
             fi
             
-            print_success "Database schema created from scratch"
+            print_success "Fresh database schema created for clean install"
         else
-            print_success "Database schema updated successfully"
+            # Use schema:update which handles existing tables gracefully
+            print_step "Updating database schema to match entities"
+            php bin/console doctrine:schema:update --force --env=prod 2>&1
+            schema_result=$?
+            
+            if [[ $schema_result -ne 0 ]]; then
+                print_warning "Schema update failed, trying to create fresh schema"
+                
+                # If update fails, try to drop and recreate
+                php bin/console doctrine:schema:drop --force --env=prod 2>/dev/null || true
+                php bin/console doctrine:schema:create --env=prod 2>&1
+                schema_result=$?
+                
+                if [[ $schema_result -ne 0 ]]; then
+                    print_error "Failed to create database schema"
+                    return 1
+                fi
+                
+                print_success "Database schema created from scratch"
+            else
+                print_success "Database schema updated successfully"
+            fi
         fi
     fi
     
@@ -191,8 +223,9 @@ EOF
     print_step "Loading initial data"
     
     # Check if this is a clean database setup
-    if [[ "${CLEAR_DATABASE:-false}" == "true" ]]; then
+    if [[ "${DATABASE_WAS_CLEARED:-false}" == "true" ]]; then
         print_step "Clean database setup - skipping fixtures to ensure empty database"
+        log "Fixture loading skipped for clean install (DATABASE_WAS_CLEARED=true)"
         print_success "Database is clean and ready for fresh use"
     else
         # Check if fixtures command exists and fixtures are available
