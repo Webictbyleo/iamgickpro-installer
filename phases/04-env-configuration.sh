@@ -10,7 +10,7 @@ configure_environment() {
     local frontend_env="$TEMP_DIR/iamgickpro/frontend/.env"
 
     # Set default Backend URL if not defined
-    BACKEND_URL="${BACKEND_URL:-FRONTEND_URL}"
+    BACKEND_URL="${BACKEND_URL:-$FRONTEND_URL}"
     
     # Set default values for optional API keys if not defined
     UNSPLASH_API_KEY="${UNSPLASH_API_KEY:-}"

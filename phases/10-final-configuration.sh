@@ -38,8 +38,8 @@ final_configuration() {
         print_success "Admin user already exists: $ADMIN_EMAIL"
     fi
     
-    # Set final file permissions
-    print_step "Setting final file permissions"
+    # Set initial file permissions
+    print_step "Setting initial file permissions"
     
     # Backend permissions
     chown -R www-data:www-data "$INSTALL_DIR"
@@ -55,7 +55,26 @@ final_configuration() {
     # Frontend webroot permissions
     chmod -R 755 "$INSTALL_DIR/public"
     
-    print_success "File permissions configured"
+    print_success "Initial file permissions configured"
+    
+    # Clear and regenerate cache with proper ownership
+    print_step "Clearing and warming up cache"
+    
+    # Remove existing cache if it exists
+    rm -rf "$backend_dir/var/cache/prod" || true
+    
+    # Clear and warm cache as www-data user
+    sudo -u www-data php bin/console cache:clear --env=prod
+    sudo -u www-data php bin/console cache:warmup --env=prod
+    
+    # Optimize composer autoloader
+    composer dump-autoload --optimize --no-dev
+    
+    # Ensure proper ownership after cache operations
+    chown -R www-data:www-data "$backend_dir/var"
+    chmod -R 775 "$backend_dir/var"
+    
+    print_success "Cache configured with proper permissions"
     
     # Start background worker service
     print_step "Starting background services"
@@ -113,13 +132,6 @@ EOF
     
     # Run final system optimization
     print_step "Running system optimization"
-    
-    # Clear all caches
-    php bin/console cache:clear --env=prod
-    php bin/console cache:warmup --env=prod
-    
-    # Optimize composer autoloader
-    composer dump-autoload --optimize --no-dev
     
     # Update file locate database
     updatedb &> /dev/null || true

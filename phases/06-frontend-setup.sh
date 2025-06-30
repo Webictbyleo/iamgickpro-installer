@@ -261,24 +261,6 @@ server {
         try_files \$uri /index.php\$is_args\$args;
     }
 
-    # Handle PHP files in API
-    location ~ \.php$ {
-        root $INSTALL_DIR/backend/public;
-        include snippets/fastcgi-php.conf;
-        fastcgi_split_path_info ^(.+?\.php)(/.*)$;
-        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        fastcgi_param PATH_INFO \$fastcgi_path_info;
-        
-        # Security and timeouts
-        fastcgi_hide_header X-Powered-By;
-        fastcgi_read_timeout 300s;
-        fastcgi_send_timeout 300s;
-        fastcgi_connect_timeout 60s;
-        fastcgi_buffer_size 128k;
-        fastcgi_buffers 4 256k;
-        fastcgi_busy_buffers_size 256k;
-    }
 
     # Media file routes (serve from backend)
     location /media/ {
@@ -315,7 +297,24 @@ server {
         
     }
 
-    
+    # Handle PHP files in API
+    location ~ \.php$ {
+        root $INSTALL_DIR/backend/public;
+        include snippets/fastcgi-php.conf;
+        fastcgi_split_path_info ^(.+?\.php)(/.*)$;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param PATH_INFO \$fastcgi_path_info;
+        
+        # Security and timeouts
+        fastcgi_hide_header X-Powered-By;
+        fastcgi_read_timeout 300s;
+        fastcgi_send_timeout 300s;
+        fastcgi_connect_timeout 60s;
+        fastcgi_buffer_size 128k;
+        fastcgi_buffers 4 256k;
+        fastcgi_busy_buffers_size 256k;
+    }
 
     # Frontend routes (SPA) - must be last to catch all remaining routes
     location / {
@@ -336,6 +335,10 @@ server {
     location ~ package(-lock)?\.json {
         deny all;
     }
+
+    # Logging
+    access_log /var/log/nginx/imagepro_access.log;
+    error_log /var/log/nginx/imagepro_error.log;
 }
 EOF
 
