@@ -421,6 +421,8 @@ handle_existing_installation() {
         print_warning "Force reinstall mode - removing existing installation"
         backup_existing_installation
         rm -rf "$INSTALL_DIR"
+        export CLEAR_DATABASE=true  # Signal database phase to clear database
+        log "Force reinstall: Installation directory cleared, database will be cleared"
         return 0
     fi
     
@@ -444,6 +446,8 @@ handle_existing_installation() {
                 print_step "Creating backup and proceeding with installation"
                 backup_existing_installation
                 rm -rf "$INSTALL_DIR"
+                export CLEAR_DATABASE=true  # Signal database phase to clear database
+                log "Manual reinstall: Installation directory cleared, database will be cleared"
                 break
                 ;;
             2)

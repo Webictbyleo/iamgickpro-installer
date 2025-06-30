@@ -184,7 +184,7 @@ import_content() {
     
     # Run the template import with timeout and better error handling
     print_step "Starting template import (this may take several minutes)"
-    timeout 600 node advanced-template-importer.js --category "youtube cover" --force --clear-existing  --backend-dir="$backend_dir"
+    timeout 600 node advanced-template-importer.js --category "youtube cover" --clear-existing  --backend-dir="$backend_dir"
     import_exit_code=$?
     
     if [[ $import_exit_code -eq 124 ]]; then

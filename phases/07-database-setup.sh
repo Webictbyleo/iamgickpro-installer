@@ -38,6 +38,23 @@ setup_database() {
     
     DB_EXISTS=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_ADMIN_USER" -p"$DB_ADMIN_PASSWORD" -e "SHOW DATABASES LIKE '$DB_NAME';" | grep -c "$DB_NAME")
     
+    # Handle database clearing for clean reinstalls
+    if [[ "${CLEAR_DATABASE:-false}" == "true" ]] && [[ $DB_EXISTS -eq 1 ]]; then
+        print_warning "Clean reinstall requested - clearing existing database"
+        print_step "Dropping existing database: $DB_NAME"
+        
+        mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_ADMIN_USER" -p"$DB_ADMIN_PASSWORD" -e "DROP DATABASE IF EXISTS \`$DB_NAME\`;"
+        
+        if [[ $? -ne 0 ]]; then
+            print_error "Failed to drop existing database: $DB_NAME"
+            return 1
+        fi
+        
+        print_success "Existing database cleared"
+        DB_EXISTS=0  # Set to 0 so we create it fresh below
+        log "Database cleared for clean reinstall"
+    fi
+    
     if [[ $DB_EXISTS -eq 0 ]]; then
         print_step "Creating database: $DB_NAME"
         
