@@ -39,6 +39,7 @@ MAIL_FROM_ADDRESS="$MAIL_FROM_ADDRESS"
 # Application Configuration
 APP_NAME="$APP_NAME"
 FRONTEND_URL="$FRONTEND_URL"
+BACKEND_URL="$BACKEND_URL"
 
 # File Storage Configuration
 UPLOAD_DIR=%kernel.project_dir%/public/uploads
