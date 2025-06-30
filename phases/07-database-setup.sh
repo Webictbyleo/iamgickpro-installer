@@ -6,6 +6,14 @@
 setup_database() {
     print_step "Setting up database"
     
+    # Debug: Check if CLEAR_DATABASE flag is set
+    if [[ "${CLEAR_DATABASE:-false}" == "true" ]]; then
+        log "Database setup: CLEAR_DATABASE flag is set to true"
+        print_warning "Database clearing requested for clean reinstall"
+    else
+        log "Database setup: CLEAR_DATABASE flag is not set (value: ${CLEAR_DATABASE:-'not set'})"
+    fi
+    
     local backend_dir="$INSTALL_DIR/backend"
     
     # Determine which credentials to use for database operations
@@ -51,8 +59,8 @@ setup_database() {
         fi
         
         print_success "Existing database cleared"
+        log "Database '$DB_NAME' dropped for clean reinstall (CLEAR_DATABASE=true)"
         DB_EXISTS=0  # Set to 0 so we create it fresh below
-        log "Database cleared for clean reinstall"
     fi
     
     if [[ $DB_EXISTS -eq 0 ]]; then
@@ -182,17 +190,23 @@ EOF
     # Load initial data if fixtures exist
     print_step "Loading initial data"
     
-    # Check if fixtures command exists and fixtures are available
-    if php bin/console list --env=prod | grep -q "doctrine:fixtures:load" 2>/dev/null; then
-        print_step "Loading database fixtures"
-        php bin/console doctrine:fixtures:load --no-interaction --env=prod 2>&1
-        if [[ $? -eq 0 ]]; then
-            print_success "Database fixtures loaded"
-        else
-            print_warning "Failed to load fixtures, continuing with empty database"
-        fi
+    # Check if this is a clean database setup
+    if [[ "${CLEAR_DATABASE:-false}" == "true" ]]; then
+        print_step "Clean database setup - skipping fixtures to ensure empty database"
+        print_success "Database is clean and ready for fresh use"
     else
-        print_step "No fixtures available, database ready for use"
+        # Check if fixtures command exists and fixtures are available
+        if php bin/console list --env=prod | grep -q "doctrine:fixtures:load" 2>/dev/null; then
+            print_step "Loading database fixtures"
+            php bin/console doctrine:fixtures:load --no-interaction --env=prod 2>&1
+            if [[ $? -eq 0 ]]; then
+                print_success "Database fixtures loaded"
+            else
+                print_warning "Failed to load fixtures, continuing with empty database"
+            fi
+        else
+            print_step "No fixtures available, database ready for use"
+        fi
     fi
     
     # Create database indexes for performance (if not created by migrations)

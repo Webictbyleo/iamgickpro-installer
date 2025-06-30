@@ -8,10 +8,14 @@ configure_environment() {
     
     local backend_env="$TEMP_DIR/iamgickpro/backend/.env"
     local frontend_env="$TEMP_DIR/iamgickpro/frontend/.env"
+
+    # Set default Backend URL if not defined
+    BACKEND_URL="${BACKEND_URL:-FRONTEND_URL}"
     
     # Set default values for optional API keys if not defined
     UNSPLASH_API_KEY="${UNSPLASH_API_KEY:-}"
     ICONFINDER_API_KEY="${ICONFINDER_API_KEY:-}"
+    PEXELS_API_KEY="${PEXELS_API_KEY:-}"
     
     # Generate backend .env file
     print_step "Creating backend environment configuration"
@@ -54,6 +58,7 @@ MESSENGER_TRANSPORT_DSN=doctrine://default
 # External Services
 UNSPLASH_ACCESS_KEY="$UNSPLASH_API_KEY"
 ICONFINDER_API_KEY="$ICONFINDER_API_KEY"
+PEXELS_API_KEY="$PEXELS_API_KEY"
 
 # Media Processing
 IMAGEMAGICK_PATH=/usr/local/bin/convert

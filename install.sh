@@ -422,7 +422,8 @@ handle_existing_installation() {
         backup_existing_installation
         rm -rf "$INSTALL_DIR"
         export CLEAR_DATABASE=true  # Signal database phase to clear database
-        log "Force reinstall: Installation directory cleared, database will be cleared"
+        log "Force reinstall: Installation directory cleared, database will be cleared (CLEAR_DATABASE=$CLEAR_DATABASE)"
+        echo -e "${YELLOW}Note: Database will be cleared during installation${NC}"
         return 0
     fi
     
@@ -447,7 +448,8 @@ handle_existing_installation() {
                 backup_existing_installation
                 rm -rf "$INSTALL_DIR"
                 export CLEAR_DATABASE=true  # Signal database phase to clear database
-                log "Manual reinstall: Installation directory cleared, database will be cleared"
+                log "Manual reinstall: Installation directory cleared, database will be cleared (CLEAR_DATABASE=$CLEAR_DATABASE)"
+                echo -e "${YELLOW}Note: Database will be cleared during installation${NC}"
                 break
                 ;;
             2)
