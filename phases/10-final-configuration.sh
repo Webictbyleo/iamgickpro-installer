@@ -126,6 +126,78 @@ EOF
     
     print_success "System optimization completed"
     
+    # Setup SSL with Let's Encrypt
+    print_step "Setting up SSL with Let's Encrypt"
+    
+    # Check if domain is accessible (skip SSL if localhost or IP)
+    if [[ "$DOMAIN_NAME" == "localhost" ]] || [[ "$DOMAIN_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        print_warning "Skipping SSL setup - domain is localhost or IP address"
+        print_warning "SSL is only available for proper domain names"
+        SSL_CONFIGURED="No (localhost/IP)"
+    else
+        # Install certbot if not present
+        if ! command -v certbot &> /dev/null; then
+            print_step "Installing Certbot for Let's Encrypt"
+            
+            # Install snapd if not present
+            if ! command -v snap &> /dev/null; then
+                apt update
+                apt install -y snapd
+                systemctl enable snapd
+                systemctl start snapd
+                
+                # Wait for snapd to be ready
+                sleep 5
+            fi
+            
+            # Install certbot via snap (recommended method)
+            snap install core; snap refresh core
+            snap install --classic certbot
+            
+            # Create symlink
+            ln -sf /snap/bin/certbot /usr/bin/certbot
+            
+            if ! command -v certbot &> /dev/null; then
+                print_error "Failed to install Certbot"
+                print_warning "SSL setup skipped - continuing without HTTPS"
+                SSL_CONFIGURED="No (certbot installation failed)"
+            else
+                print_success "Certbot installed successfully"
+            fi
+        else
+            print_success "Certbot already installed"
+        fi
+        
+        # Attempt to obtain SSL certificate and configure nginx automatically
+        if command -v certbot &> /dev/null; then
+            print_step "Setting up SSL certificate for $DOMAIN_NAME"
+            
+            # Use certbot nginx plugin - it handles existing certificates automatically
+            if certbot --nginx --non-interactive --agree-tos --redirect --email "admin@$DOMAIN_NAME" -d "$DOMAIN_NAME"; then
+                print_success "SSL certificate configured successfully"
+                print_success "Site is now available at https://$DOMAIN_NAME with automatic HTTP to HTTPS redirect"
+                SSL_CONFIGURED="Yes (https://$DOMAIN_NAME)"
+                
+                # Setup automatic certificate renewal if not already configured
+                if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
+                    print_step "Setting up automatic certificate renewal"
+                    (crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet") | crontab -
+                    print_success "Automatic certificate renewal configured"
+                fi
+            else
+                print_warning "SSL setup failed - continuing with HTTP"
+                print_warning "Common causes:"
+                print_warning "  - Domain $DOMAIN_NAME does not point to this server"
+                print_warning "  - Port 80/443 not accessible from the internet"
+                print_warning "  - Firewall blocking connections"
+                print_warning "Site remains available at http://$DOMAIN_NAME"
+                SSL_CONFIGURED="No (certificate setup failed)"
+            fi
+        else
+            SSL_CONFIGURED="No (certbot not available)"
+        fi
+    fi
+    
     # Generate installation summary
     print_step "Generating installation summary"
     
@@ -136,6 +208,7 @@ Installation Date: $(date)
 Installation Directory: $INSTALL_DIR
 Domain: $DOMAIN_NAME
 Frontend URL: $FRONTEND_URL
+SSL Certificate: ${SSL_CONFIGURED:-"Not configured"}
 
 Database Configuration:
 - Host: $DB_HOST:$DB_PORT
@@ -163,14 +236,15 @@ Installed Components:
 ✓ FFmpeg (compiled from source)
 ✓ IAMGickPro Application
 ✓ Background Worker Service
+$([ "$SSL_CONFIGURED" != "No"* ] && echo "✓ SSL/TLS Certificate" || echo "⚠ SSL/TLS Certificate (not configured)")
 
 Configuration Files:
 - Nginx: /etc/nginx/sites-available/iamgickpro
 - Backend Config: $backend_dir/.env
 
 Next Steps:
-1. Configure SSL certificates (recommended: certbot --nginx)
-2. Set up domain DNS to point to this server
+$([ "$SSL_CONFIGURED" == "No"* ] && echo "1. Configure SSL certificates: certbot --nginx -d $DOMAIN_NAME" || echo "1. SSL is configured and ready")
+2. Set up domain DNS to point to this server (if not done already)
 3. Review and customize application settings
 4. Consider setting up monitoring and alerting
 
