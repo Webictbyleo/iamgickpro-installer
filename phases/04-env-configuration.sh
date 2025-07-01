@@ -29,7 +29,7 @@ DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?serverVer
 # Application Environment
 APP_ENV=prod
 APP_SECRET=$(openssl rand -hex 32)
-APP_DEBUG=0
+APP_DEBUG=1
 
 # JWT Configuration
 JWT_SECRET_KEY=%kernel.project_dir%/config/jwt/private.pem
