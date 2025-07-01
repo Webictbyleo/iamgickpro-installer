@@ -135,9 +135,18 @@ EOF
     
     cd "$backend_dir"
     
+    # Disable messenger transport during connection test to avoid automatic table creation
+    ORIGINAL_MESSENGER_DSN="${MESSENGER_TRANSPORT_DSN:-}"
+    export MESSENGER_TRANSPORT_DSN=""
+    
     # Use Symfony console to test database connection
     php bin/console doctrine:query:sql "SELECT 1" --env=prod &> /dev/null
-    if [[ $? -ne 0 ]]; then
+    connection_result=$?
+    
+    # Restore messenger DSN
+    export MESSENGER_TRANSPORT_DSN="$ORIGINAL_MESSENGER_DSN"
+    
+    if [[ $connection_result -ne 0 ]]; then
         print_error "Application cannot connect to database"
         print_error "Please check the database configuration in .env"
         return 1
@@ -181,15 +190,42 @@ EOF
         # Check if this is a clean database setup (dropped and recreated)
         if [[ "${DATABASE_WAS_CLEARED:-false}" == "true" ]]; then
             print_step "Creating fresh database schema for clean install (database was cleared)"
-            php bin/console doctrine:schema:create --env=prod 2>&1
-            schema_result=$?
             
-            if [[ $schema_result -ne 0 ]]; then
-                print_error "Failed to create fresh database schema"
-                return 1
+            # Temporarily disable messenger transport to prevent automatic table creation
+            ORIGINAL_MESSENGER_DSN="${MESSENGER_TRANSPORT_DSN:-}"
+            export MESSENGER_TRANSPORT_DSN=""
+            
+            # Try schema:create first
+            if php bin/console doctrine:schema:create --env=prod 2>&1; then
+                print_success "Fresh database schema created for clean install"
+            else
+                print_warning "Schema create failed, attempting to drop any existing tables and recreate"
+                
+                # Drop all tables and recreate from scratch
+                php bin/console doctrine:schema:drop --force --env=prod 2>/dev/null || true
+                php bin/console doctrine:schema:create --env=prod 2>&1
+                schema_result=$?
+                
+                if [[ $schema_result -ne 0 ]]; then
+                    print_warning "Schema create still failing, using schema update as fallback"
+                    php bin/console doctrine:schema:update --force --env=prod 2>&1
+                    schema_result=$?
+                    
+                    if [[ $schema_result -ne 0 ]]; then
+                        # Restore messenger DSN
+                        export MESSENGER_TRANSPORT_DSN="$ORIGINAL_MESSENGER_DSN"
+                        print_error "Failed to create database schema for clean install"
+                        return 1
+                    fi
+                    
+                    print_success "Database schema updated for clean install"
+                else
+                    print_success "Database schema created after dropping existing tables"
+                fi
             fi
             
-            print_success "Fresh database schema created for clean install"
+            # Restore messenger DSN
+            export MESSENGER_TRANSPORT_DSN="$ORIGINAL_MESSENGER_DSN"
         else
             # Use schema:update which handles existing tables gracefully
             print_step "Updating database schema to match entities"
