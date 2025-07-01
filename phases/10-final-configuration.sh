@@ -58,24 +58,47 @@ final_configuration() {
     print_success "Initial file permissions configured"
     
     # Ensure cache permissions are correct and refresh if needed
-    print_step "Verifying cache configuration"
+    print_step "Configuring production cache"
+    
+    # Clear any existing cache to prevent corruption
+    print_step "Clearing all existing cache"
+    rm -rf "$backend_dir/var/cache" || true
     
     # Ensure proper ownership of var directory
     chown -R www-data:www-data "$backend_dir/var"
     chmod -R 775 "$backend_dir/var"
     
-    # Only regenerate cache if it doesn't exist or has wrong ownership
-    if [[ ! -d "$backend_dir/var/cache/prod" ]] || [[ $(stat -c %U "$backend_dir/var/cache/prod" 2>/dev/null) != "www-data" ]]; then
-        print_step "Regenerating cache with proper ownership"
-        rm -rf "$backend_dir/var/cache/prod" || true
-        sudo -u www-data php bin/console cache:clear --env=prod --no-warmup
-        sudo -u www-data php bin/console cache:warmup --env=prod
+    # Regenerate cache with proper ownership
+    print_step "Regenerating production cache"
+    sudo -u www-data php bin/console cache:clear --env=prod --no-warmup
+    sudo -u www-data php bin/console cache:warmup --env=prod
+    
+    # Verify cache was created successfully
+    if [[ ! -d "$backend_dir/var/cache/prod" ]]; then
+        print_error "Failed to create production cache"
+        return 1
     fi
+    
+    # Ensure correct permissions on generated cache
+    chown -R www-data:www-data "$backend_dir/var/cache"
+    chmod -R 775 "$backend_dir/var/cache"
     
     # Final composer optimization
     composer dump-autoload --optimize --no-dev
     
-    print_success "Cache configuration verified"
+    # Additional cache validation - try to instantiate key services
+    print_step "Validating cache integrity"
+    sudo -u www-data php bin/console debug:container --env=prod LayerController > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        print_warning "Cache validation failed, regenerating..."
+        rm -rf "$backend_dir/var/cache/prod"
+        sudo -u www-data php bin/console cache:clear --env=prod --no-warmup
+        sudo -u www-data php bin/console cache:warmup --env=prod
+        chown -R www-data:www-data "$backend_dir/var/cache"
+        chmod -R 775 "$backend_dir/var/cache"
+    fi
+    
+    print_success "Production cache configured and validated"
     
     # Start background worker service
     print_step "Starting background services"
@@ -254,6 +277,13 @@ $([ "$SSL_CONFIGURED" != "No"* ] && echo "✓ SSL/TLS Certificate" || echo "⚠ 
 Configuration Files:
 - Nginx: /etc/nginx/sites-available/iamgickpro
 - Backend Config: $backend_dir/.env
+
+Cache Troubleshooting:
+If you encounter cache-related errors (500 errors, missing service files):
+1. Clear production cache: sudo -u www-data php bin/console cache:clear --env=prod
+2. Regenerate cache: sudo -u www-data php bin/console cache:warmup --env=prod
+3. Fix permissions: chown -R www-data:www-data $backend_dir/var && chmod -R 775 $backend_dir/var
+4. Validate services: sudo -u www-data php bin/console debug:container --env=prod
 
 Next Steps:
 $([ "$SSL_CONFIGURED" == "No"* ] && echo "1. Configure SSL certificates: certbot --nginx -d $DOMAIN_NAME" || echo "1. SSL is configured and ready")
