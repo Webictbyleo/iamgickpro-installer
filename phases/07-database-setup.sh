@@ -44,7 +44,14 @@ setup_database() {
     # Check if database exists
     print_step "Checking database existence"
     
-    DB_EXISTS=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_ADMIN_USER" -p"$DB_ADMIN_PASSWORD" -e "SHOW DATABASES LIKE '$DB_NAME';" | grep -c "$DB_NAME")
+    # More robust database existence check
+    DB_EXISTS_RESULT=$(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_ADMIN_USER" -p"$DB_ADMIN_PASSWORD" -e "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '$DB_NAME';" 2>/dev/null | grep -c "$DB_NAME")
+    DB_EXISTS=$DB_EXISTS_RESULT
+    
+    # Debug logging
+    log "Database existence check: DB_EXISTS=$DB_EXISTS, CLEAR_DATABASE=${CLEAR_DATABASE:-false}"
+    log "Condition check: CLEAR_DATABASE='${CLEAR_DATABASE:-false}' == 'true' is $([[ "${CLEAR_DATABASE:-false}" == "true" ]] && echo "TRUE" || echo "FALSE")"
+    log "DB_EXISTS check: DB_EXISTS=$DB_EXISTS -eq 1 is $([[ $DB_EXISTS -eq 1 ]] && echo "TRUE" || echo "FALSE")"
     
     # Handle database clearing for clean reinstalls
     if [[ "${CLEAR_DATABASE:-false}" == "true" ]] && [[ $DB_EXISTS -eq 1 ]]; then
@@ -74,14 +81,19 @@ setup_database() {
         log "Fresh database '$DB_NAME' created after clean reinstall"
         DB_EXISTS=1  # Set to 1 since we just created it
         DATABASE_WAS_CLEARED=true
+        DATABASE_CREATION_HANDLED=true  # Flag to skip the normal creation logic
     elif [[ "${CLEAR_DATABASE:-false}" == "true" ]] && [[ $DB_EXISTS -eq 0 ]]; then
         print_step "Clean reinstall requested but database doesn't exist - will create fresh"
         DATABASE_WAS_CLEARED=true
+        DATABASE_CREATION_HANDLED=false
     else
+        log "Database clearing conditions not met: CLEAR_DATABASE=${CLEAR_DATABASE:-false}, DB_EXISTS=$DB_EXISTS"
         DATABASE_WAS_CLEARED=false
+        DATABASE_CREATION_HANDLED=false
     fi
     
-    if [[ $DB_EXISTS -eq 0 ]]; then
+    # Create database if it doesn't exist (and wasn't already handled by clearing logic)
+    if [[ $DB_EXISTS -eq 0 ]] && [[ "${DATABASE_CREATION_HANDLED:-false}" == "false" ]]; then
         print_step "Creating database: $DB_NAME"
         
         mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_ADMIN_USER" -p"$DB_ADMIN_PASSWORD" -e "CREATE DATABASE \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
@@ -92,6 +104,8 @@ setup_database() {
         fi
         
         print_success "Database created: $DB_NAME"
+    elif [[ "${DATABASE_CREATION_HANDLED:-false}" == "true" ]]; then
+        print_step "Database creation already handled in clearing process"
     else
         print_success "Database already exists: $DB_NAME"
     fi
