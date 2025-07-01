@@ -137,7 +137,7 @@ EOF
     
     # Disable messenger transport during connection test to avoid automatic table creation
     ORIGINAL_MESSENGER_DSN="${MESSENGER_TRANSPORT_DSN:-}"
-    export MESSENGER_TRANSPORT_DSN=""
+    export MESSENGER_TRANSPORT_DSN="sync://"
     
     # Use Symfony console to test database connection
     php bin/console doctrine:query:sql "SELECT 1" --env=prod &> /dev/null
@@ -168,8 +168,8 @@ EOF
             print_warning "Migration failed, attempting to create schema directly"
             
             # Clear any partial schema and recreate
-            # Temporarily disable messenger to avoid transport issues
-            export MESSENGER_TRANSPORT_DSN=""
+            # Temporarily use sync transport to avoid messenger table issues
+            export MESSENGER_TRANSPORT_DSN="sync://"
             php bin/console doctrine:schema:drop --force --env=prod 2>/dev/null || true
             php bin/console doctrine:schema:create --env=prod 2>&1
             schema_result=$?
@@ -191,9 +191,9 @@ EOF
         if [[ "${DATABASE_WAS_CLEARED:-false}" == "true" ]]; then
             print_step "Creating fresh database schema for clean install (database was cleared)"
             
-            # Temporarily disable messenger transport to prevent automatic table creation
+            # Temporarily use sync transport to prevent automatic table creation
             ORIGINAL_MESSENGER_DSN="${MESSENGER_TRANSPORT_DSN:-}"
-            export MESSENGER_TRANSPORT_DSN=""
+            export MESSENGER_TRANSPORT_DSN="sync://"
             
             # Try schema:create first
             if php bin/console doctrine:schema:create --env=prod 2>&1; then
