@@ -3,6 +3,69 @@
 # Phase 1: User Input Collection
 # Collects all necessary configuration from the user
 
+# Function to clean and extract domain name from various inputs
+clean_domain_name() {
+    local input="$1"
+    local domain=""
+    
+    # Remove leading/trailing whitespace
+    input=$(echo "$input" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    
+    # Return empty if input is empty
+    if [[ -z "$input" ]]; then
+        echo ""
+        return 1
+    fi
+    
+    # Convert to lowercase for processing
+    input=$(echo "$input" | tr '[:upper:]' '[:lower:]')
+    
+    # Remove protocol (http://, https://, ftp://, etc.)
+    input=$(echo "$input" | sed 's|^[a-z][a-z0-9+.-]*://||')
+    
+    # Remove www. prefix if present
+    input=$(echo "$input" | sed 's/^www\.//')
+    
+    # Remove path, query parameters, and fragments (everything after first /, ?, or #)
+    domain=$(echo "$input" | sed 's|[/?#].*||')
+    
+    # Remove port number (e.g., :8080, :443)
+    domain=$(echo "$domain" | sed 's/:[0-9]*$//')
+    
+    # Remove any remaining invalid characters at the end
+    domain=$(echo "$domain" | sed 's/[^a-zA-Z0-9.-]*$//')
+    
+    # Remove leading/trailing dots or hyphens
+    domain=$(echo "$domain" | sed 's/^[.-]*//;s/[.-]*$//')
+    
+    # Return empty if domain is empty, too short, or contains only dots/hyphens
+    if [[ -z "$domain" ]] || [[ ${#domain} -lt 2 ]] || [[ "$domain" =~ ^[.-]+$ ]]; then
+        echo ""
+        return 1
+    fi
+    
+    # Check for common invalid patterns
+    if [[ "$domain" =~ \.\. ]] || [[ "$domain" =~ ^- ]] || [[ "$domain" =~ -$ ]]; then
+        echo ""
+        return 1
+    fi
+    
+    # Check for underscores (not allowed in domain names, only in hostnames)
+    if [[ "$domain" =~ _ ]]; then
+        echo ""
+        return 1
+    fi
+    
+    # For non-localhost/IP domains, require at least one dot
+    if [[ "$domain" != "localhost" ]] && [[ ! "$domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ ! "$domain" =~ \. ]]; then
+        echo ""
+        return 1
+    fi
+    
+    echo "$domain"
+    return 0
+}
+
 # Check for cached configuration
 check_cached_config() {
     local cached_config="$CONFIG_CACHE/config.env"
@@ -135,13 +198,77 @@ collect_user_input() {
     echo -e "${WHITE}Please provide the following information:${NC}"
     echo
     
+    # Domain name with enhanced help
+    echo -e "${CYAN}Domain Configuration:${NC}"
+    echo "Enter your domain name (the installer will automatically clean it up):"
+    echo -e "${WHITE}Examples:${NC}"
+    echo "  • Just domain: mydesignstudio.com"
+    echo "  • Full URL: https://www.mydesignstudio.com/path → mydesignstudio.com"
+    echo "  • With port: mysite.com:8080 → mysite.com"
+    echo
+    
     # Domain name
     while [[ -z "$DOMAIN_NAME" ]]; do
-        printf "Domain name (e.g., mydesignstudio.com): "
-        read -r DOMAIN_NAME </dev/tty
-        if [[ -z "$DOMAIN_NAME" ]]; then
+        printf "Domain name: "
+        read -r input_domain </dev/tty
+        
+        if [[ -z "$input_domain" ]]; then
             print_warning "Domain name is required"
+            continue
         fi
+        
+        # Show what we're cleaning if input looks like a URL
+        if [[ "$input_domain" =~ ^https?:// ]] || [[ "$input_domain" =~ ^www\. ]] || [[ "$input_domain" =~ / ]]; then
+            print_step "Cleaning domain from input: $input_domain"
+        fi
+        
+        # Clean and validate domain name
+        DOMAIN_NAME=$(clean_domain_name "$input_domain")
+        
+        if [[ -z "$DOMAIN_NAME" ]]; then
+            print_warning "Invalid domain name format"
+            print_warning "Please enter just the domain name (e.g., example.com, mysite.org)"
+            continue
+        fi
+        
+        # Show cleaned result if it's different from input
+        if [[ "$DOMAIN_NAME" != "$input_domain" ]]; then
+            print_step "Cleaned domain name: $DOMAIN_NAME"
+        fi
+        
+        # Validate domain format
+        if [[ ! "$DOMAIN_NAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
+            print_warning "Invalid domain name format: $DOMAIN_NAME"
+            print_warning "Domain names must:"
+            print_warning "  • Start and end with letters or numbers"
+            print_warning "  • Contain only letters, numbers, dots, and hyphens"
+            print_warning "  • Have at least one dot (e.g., example.com)"
+            print_warning "  • Not exceed 63 characters per segment"
+            DOMAIN_NAME=""
+            continue
+        fi
+        
+        # Ensure domain has at least one dot (is not just TLD)
+        if [[ ! "$DOMAIN_NAME" =~ \. ]]; then
+            print_warning "Domain name must include a top-level domain (e.g., .com, .org): $DOMAIN_NAME"
+            DOMAIN_NAME=""
+            continue
+        fi
+        
+        # Check for localhost/IP addresses - warn but allow
+        if [[ "$DOMAIN_NAME" == "localhost" ]] || [[ "$DOMAIN_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            print_warning "Using localhost/IP address: $DOMAIN_NAME"
+            print_warning "SSL certificates cannot be generated for localhost/IP addresses"
+            printf "Continue with this domain? (y/N): "
+            read -r confirm </dev/tty
+            echo
+            if [[ ! "$confirm" =~ ^[Yy] ]]; then
+                DOMAIN_NAME=""
+                continue
+            fi
+        fi
+        
+        print_success "Domain name set to: $DOMAIN_NAME"
     done
     
     # Base path configuration
@@ -324,6 +451,13 @@ collect_user_input() {
     echo
     echo -e "${WHITE}Configuration Summary:${NC}"
     echo -e "${CYAN}Domain:${NC} $DOMAIN_NAME"
+    if [[ -n "$BASE_PATH" ]]; then
+        echo -e "${CYAN}Base Path:${NC} $BASE_PATH"
+        echo -e "${CYAN}Application URL:${NC} $FRONTEND_URL"
+    else
+        echo -e "${CYAN}Base Path:${NC} (root installation)"
+        echo -e "${CYAN}Application URL:${NC} $FRONTEND_URL"
+    fi
     echo -e "${CYAN}Database:${NC} $DB_NAME @ $DB_HOST:$DB_PORT"
     echo -e "${CYAN}Database User:${NC} $DB_USER"
     echo -e "${CYAN}Admin Email:${NC} $ADMIN_EMAIL"
