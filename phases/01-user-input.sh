@@ -23,6 +23,7 @@ check_cached_config() {
         echo
         echo -e "${CYAN}Cached Configuration Found:${NC}"
         echo -e "${CYAN}Domain:${NC} ${DOMAIN_NAME:-'(not set)'}"
+        echo -e "${CYAN}Base Path:${NC} ${BASE_PATH:-'(root)'}"
         echo -e "${CYAN}Database:${NC} ${DB_NAME:-'(not set)'} @ ${DB_HOST:-'localhost'}:${DB_PORT:-'3306'}"
         echo -e "${CYAN}Database User:${NC} ${DB_USER:-'(not set)'}"
         echo -e "${CYAN}Admin Email:${NC} ${ADMIN_EMAIL:-'(not set)'}"
@@ -50,6 +51,7 @@ check_cached_config() {
                     # Clear all cached variables to force fresh input (set to empty strings)
                     # Note: INSTALL_DIR is not cleared as it's handled by main install.sh
                     DOMAIN_NAME=""
+                    BASE_PATH=""
                     DB_NAME=""
                     DB_USER=""
                     DB_PASSWORD=""
@@ -99,6 +101,7 @@ save_config_cache() {
 # Note: Installation directory is not cached and will be prompted for each installation
 
 DOMAIN_NAME="$DOMAIN_NAME"
+BASE_PATH="$BASE_PATH"
 DB_HOST="$DB_HOST"
 DB_PORT="$DB_PORT"
 DB_NAME="$DB_NAME"
@@ -140,8 +143,38 @@ collect_user_input() {
             print_warning "Domain name is required"
         fi
     done
-    FRONTEND_URL="https://$DOMAIN_NAME"
-    BACKEND_URL="https://$DOMAIN_NAME"
+    
+    # Base path configuration
+    echo
+    echo -e "${CYAN}Base Path Configuration:${NC}"
+    echo "Leave empty to install at domain root (https://$DOMAIN_NAME/)"
+    echo "Or specify a path to install as subdirectory (e.g., /image-editor, /design-tool)"
+    echo
+    printf "Base path [leave empty for root]: "
+    read -r BASE_PATH </dev/tty
+    
+    # Validate and clean base path
+    if [[ -n "$BASE_PATH" ]]; then
+        # Remove trailing slash
+        BASE_PATH="${BASE_PATH%/}"
+        # Ensure it starts with a slash
+        if [[ "${BASE_PATH:0:1}" != "/" ]]; then
+            BASE_PATH="/$BASE_PATH"
+        fi
+        # Validate path format (no special characters except dash and underscore)
+        if [[ ! "$BASE_PATH" =~ ^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$ ]]; then
+            print_error "Invalid base path format. Use only letters, numbers, hyphens, and underscores."
+            print_error "Examples: /image-editor, /design-tool, /products/editor"
+            exit 1
+        fi
+        print_success "Base path set to: $BASE_PATH"
+        FRONTEND_URL="https://$DOMAIN_NAME$BASE_PATH"
+        BACKEND_URL="https://$DOMAIN_NAME$BASE_PATH"
+    else
+        print_success "Installing at domain root"
+        FRONTEND_URL="https://$DOMAIN_NAME"
+        BACKEND_URL="https://$DOMAIN_NAME"
+    fi
     
     # Database configuration
     echo

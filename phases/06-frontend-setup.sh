@@ -232,9 +232,12 @@ setup_frontend() {
     print_success "Webroot permissions set"
     
     # Create nginx configuration
-    print_step "Configuring nginx"
+    print_step "Configuring nginx for domain: $DOMAIN_NAME with base path: ${BASE_PATH:-'(root)'}"
     
-    cat > "/etc/nginx/sites-available/iamgickpro" << EOF
+    # Generate nginx configuration based on whether BASE_PATH is set
+    if [[ -z "$BASE_PATH" ]]; then
+        # Root installation (no base path)
+        cat > "/etc/nginx/sites-available/iamgickpro" << EOF
 server {
     listen 80;
     server_name $DOMAIN_NAME;
@@ -260,7 +263,6 @@ server {
         root $INSTALL_DIR/backend/public;
         try_files \$uri /index.php\$is_args\$args;
     }
-
 
     # Media file routes (serve from backend)
     location /media/ {
@@ -294,7 +296,6 @@ server {
     location /secure-media/ {
         root $INSTALL_DIR/backend/public;
         try_files \$uri /index.php\$is_args\$args;
-        
     }
 
     # Handle PHP files in API
@@ -318,8 +319,8 @@ server {
 
     # Frontend routes (SPA) - must be last to catch all remaining routes
     location / {
-        root /var/www/html/iamgickpro/public;
-		index index.html;
+        root $webroot;
+        index index.html;
         try_files \$uri \$uri/ /index.html;
     }
 
@@ -341,6 +342,134 @@ server {
     error_log /var/log/nginx/imagepro_error.log;
 }
 EOF
+    else
+        # Subdirectory installation (with base path)
+        cat > "/etc/nginx/sites-available/iamgickpro" << EOF
+server {
+    listen 80;
+    server_name $DOMAIN_NAME;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
+
+    # IAMGickPro application at custom base path
+    location $BASE_PATH {
+        alias $webroot;
+        index index.html;
+        try_files \$uri \$uri/ @iamgickpro_fallback;
+        
+        # Handle assets properly
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+    
+    # Fallback for SPA routing
+    location @iamgickpro_fallback {
+        rewrite ^.*$ $BASE_PATH/index.html last;
+    }
+
+    # API routes (backend processing) - prefixed with base path
+    location $BASE_PATH/api/ {
+        rewrite ^$BASE_PATH/api/(.*)$ /api/\$1 break;
+        root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
+    }
+
+    # Media file routes (serve from backend) - prefixed with base path
+    location $BASE_PATH/media/ {
+        rewrite ^$BASE_PATH/media/(.*)$ /media/\$1 break;
+        root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
+    }
+
+    # Upload file routes (serve from backend) - prefixed with base path
+    location $BASE_PATH/uploads/ {
+        rewrite ^$BASE_PATH/uploads/(.*)$ /uploads/\$1 break;
+        root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Storage file routes (serve from backend) - prefixed with base path
+    location $BASE_PATH/storage/ {
+        rewrite ^$BASE_PATH/storage/(.*)$ /storage/\$1 break;
+        root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Thumbnail routes (serve from backend) - prefixed with base path
+    location $BASE_PATH/thumbnails/ {
+        rewrite ^$BASE_PATH/thumbnails/(.*)$ /thumbnails/\$1 break;
+        root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
+    }
+
+    # Secure media routes (serve from backend with security checks) - prefixed with base path
+    location $BASE_PATH/secure-media/ {
+        rewrite ^$BASE_PATH/secure-media/(.*)$ /secure-media/\$1 break;
+        root $INSTALL_DIR/backend/public;
+        try_files \$uri /index.php\$is_args\$args;
+    }
+
+    # Handle PHP files in API
+    location ~ \.php$ {
+        root $INSTALL_DIR/backend/public;
+        include snippets/fastcgi-php.conf;
+        fastcgi_split_path_info ^(.+?\.php)(/.*)$;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param PATH_INFO \$fastcgi_path_info;
+        
+        # Security and timeouts
+        fastcgi_hide_header X-Powered-By;
+        fastcgi_read_timeout 300s;
+        fastcgi_send_timeout 300s;
+        fastcgi_connect_timeout 60s;
+        fastcgi_buffer_size 128k;
+        fastcgi_buffers 4 256k;
+        fastcgi_busy_buffers_size 256k;
+    }
+
+    # Default location for other content (if any exists on the domain)
+    location / {
+        return 404;
+    }
+
+    # Security: deny access to sensitive files
+    location ~ /\. {
+        deny all;
+    }
+
+    location ~ composer\.(json|lock) {
+        deny all;
+    }
+
+    location ~ package(-lock)?\.json {
+        deny all;
+    }
+
+    # Logging
+    access_log /var/log/nginx/imagepro_access.log;
+    error_log /var/log/nginx/imagepro_error.log;
+}
+EOF
+    fi
 
     # Enable the site
     ln -sf /etc/nginx/sites-available/iamgickpro /etc/nginx/sites-enabled/

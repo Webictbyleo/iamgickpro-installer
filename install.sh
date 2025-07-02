@@ -51,6 +51,7 @@ DB_NAME=""
 DB_USER=""
 DB_PASSWORD=""
 DOMAIN_NAME=""
+BASE_PATH=""              # Custom base path for URL (e.g., /image-editor, /design-tool)
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
 ADMIN_FIRST_NAME=""
@@ -611,6 +612,7 @@ show_welcome() {
     echo
     echo -e "${CYAN}• System Dependencies:${NC} nginx, MySQL, PHP 8.4"
     echo -e "${CYAN}• Application Setup:${NC} Backend API, Frontend UI"
+    echo -e "${CYAN}• Custom Base Path:${NC} Support for subdirectory installations"
     echo -e "${CYAN}• Database:${NC} Schema creation and migration"
     echo -e "${CYAN}• Content:${NC} Template and shape imports"
     echo -e "${CYAN}• Media Processing:${NC} ImageMagick, FFmpeg (compiled from source)"
@@ -700,6 +702,13 @@ show_help() {
     echo "    if you want to install there as a subdirectory"
     echo "  • Otherwise, installer will prompt for an existing directory"
     echo "  • Installation creates 'iamgickpro' subdirectory in chosen location"
+    echo
+    echo "Base Path Support:"
+    echo "  IAMGickPro supports installation at custom URL paths for subdirectory hosting:"
+    echo "  • Root installation: https://example.com/ (default)"
+    echo "  • Subdirectory installation: https://example.com/image-editor/"
+    echo "  • Examples: /design-tool, /editor, /products/editor"
+    echo "  • The installer will prompt for base path during configuration"
     echo
     echo "Examples:"
     echo "  sudo ./install.sh                                    # Interactive installation"
