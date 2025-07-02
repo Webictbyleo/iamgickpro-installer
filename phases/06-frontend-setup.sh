@@ -602,9 +602,6 @@ EOF
     
     print_success "Frontend setup completed"
     
-    # Validate base path configuration
-    validate_base_path_configuration
-    
     # Update frontend hash cache after successful build
     print_step "Updating frontend change detection cache"
     local current_hash=$(cd "$frontend_source" && find . -name "*.vue" -o -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.css" -o -name "*.scss" | \
@@ -620,95 +617,5 @@ EOF
     print_success "Build cleanup completed"
 }
 
-# Validate base path configuration for asset serving
-validate_base_path_configuration() {
-    if [[ -n "$BASE_PATH" ]]; then
-        print_step "Validating base path configuration: $BASE_PATH"
-        
-        local webroot="$INSTALL_DIR/public"
-        
-        # Check if index.html exists and contains proper base path
-        if [[ -f "$webroot/index.html" ]]; then
-            if [[ -n "$BASE_PATH" && "$BASE_PATH" != "/" ]]; then
-                local expected_base_path="${BASE_PATH}/"
-                if grep -q "base.*href.*$expected_base_path" "$webroot/index.html" 2>/dev/null; then
-                    print_success "Base path correctly configured in index.html"
-                else
-                    print_warning "Base path may not be properly configured in index.html"
-                    echo "Expected to find base href with path: $expected_base_path"
-                    echo "First few lines of index.html:"
-                    head -n 10 "$webroot/index.html" | grep -E "(base|href)" || echo "No base tag found"
-                    echo "Note: If you see %VITE_BASE_PATH%, the Vite build may not have processed the template correctly"
-                fi
-            else
-                # Root installation should have base href="/"
-                if grep -q 'base.*href.*"/"' "$webroot/index.html" 2>/dev/null; then
-                    print_success "Root base path correctly configured in index.html"
-                else
-                    print_warning "Root base path may not be configured in index.html"
-                    echo "Expected to find: <base href=\"/\" />"
-                    echo "Found in index.html:"
-                    head -n 10 "$webroot/index.html" | grep -E "(base|href)" || echo "No base tag found"
-                fi
-            fi
-        fi
-        
-        # Check assets directory structure
-        if [[ -d "$webroot/assets" ]]; then
-            local asset_count=$(find "$webroot/assets" -type f | wc -l)
-            print_success "Assets directory contains $asset_count files"
-            
-            # Show sample asset paths for debugging
-            echo "Sample asset files:"
-            find "$webroot/assets" -type f | head -3 | while read -r file; do
-                echo "  - ${file#$webroot}"
-            done
-        else
-            print_warning "No assets directory found in $webroot"
-            echo "Directory contents:"
-            ls -la "$webroot" | head -10
-        fi
-        
-        # Test nginx configuration for base path
-        print_step "Testing nginx configuration for base path assets"
-        
-        # Create a test file to verify nginx serving
-        local test_file="$webroot/assets/test-asset.txt"
-        mkdir -p "$(dirname "$test_file")"
-        echo "Test asset for base path validation" > "$test_file"
-        
-        # Test if assets are accessible via base path
-        local test_url="http://localhost$BASE_PATH/assets/test-asset.txt"
-        if curl -s -f "$test_url" > /dev/null 2>&1; then
-            print_success "Base path asset serving test passed"
-        else
-            print_warning "Base path asset serving test failed"
-            echo "Test URL: $test_url"
-            echo "Nginx error log (last 5 lines):"
-            tail -n 5 /var/log/nginx/imagepro_error.log 2>/dev/null || echo "No error log found"
-        fi
-        
-        # Clean up test file
-        rm -f "$test_file"
-        
-        # Provide troubleshooting information
-        echo
-        echo -e "${CYAN}Base Path Configuration Summary:${NC}"
-        echo -e "${CYAN}Domain:${NC} $DOMAIN_NAME"
-        echo -e "${CYAN}Base Path:${NC} $BASE_PATH"
-        echo -e "${CYAN}Frontend URL:${NC} $FRONTEND_URL"
-        echo -e "${CYAN}Webroot:${NC} $webroot"
-        echo -e "${CYAN}Expected Asset URL:${NC} $FRONTEND_URL/assets/"
-        echo
-        echo -e "${YELLOW}Troubleshooting Tips:${NC}"
-        echo "1. Check nginx error log: tail -f /var/log/nginx/imagepro_error.log"
-        echo "2. Verify asset files exist: ls -la $webroot/assets/"
-        echo "3. Test asset access: curl -I $FRONTEND_URL/assets/index-*.js"
-        echo "4. Check nginx config: nginx -T | grep -A 50 'server_name $DOMAIN_NAME'"
-        echo
-    else
-        print_step "Root installation detected - no base path validation needed"
-    fi
-}
-
 # Run the frontend setup
+setup_frontend
