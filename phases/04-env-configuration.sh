@@ -115,6 +115,12 @@ VITE_BUILD_MINIFY=true
 
 EOF
 
+    # Debug the generated frontend .env file
+    print_step "Frontend .env file content:"
+    echo "  VITE_BASE_PATH value: $(grep '^VITE_BASE_PATH=' "$frontend_env" | cut -d'=' -f2)"
+    echo "  Raw BASE_PATH: '$BASE_PATH'"
+    echo "  Processed vite_base_path: '$vite_base_path'"
+
     print_success "Frontend environment file created"
     
     # Validate environment files

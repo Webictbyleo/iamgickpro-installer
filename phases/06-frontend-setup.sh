@@ -177,6 +177,15 @@ setup_frontend() {
         grep -E '^VITE_' .env | grep -v 'API_KEY' | while IFS='=' read -r key value; do
             echo "    $key=$value"
         done
+        
+        # Show the exact VITE_BASE_PATH value
+        local vite_base_path=$(grep '^VITE_BASE_PATH=' .env | cut -d'=' -f2 | tr -d '"')
+        echo "  Parsed VITE_BASE_PATH: '$vite_base_path'"
+        
+        # Verify NODE_ENV is set for production build
+        echo "  NODE_ENV: ${NODE_ENV:-'not set'}"
+        export NODE_ENV=production
+        echo "  NODE_ENV set to: $NODE_ENV"
     else
         print_error "No .env file found for frontend build"
         return 1
@@ -185,7 +194,15 @@ setup_frontend() {
     # Capture build output for debugging
     local build_log_file="${TEMP_DIR}/npm_build.log"
     
+    # Show build environment
+    print_step "Build environment variables:"
+    echo "  NODE_ENV: $NODE_ENV"
+    if [[ -f ".env" ]]; then
+        echo "  VITE_BASE_PATH from .env: $(grep '^VITE_BASE_PATH=' .env | cut -d'=' -f2)"
+    fi
+    
     # Set a timeout for npm build (15 minutes)
+    print_step "Running: npm run build"
     timeout 900 npm run build > "$build_log_file" 2>&1 &
     local build_pid=$!
     spinner
@@ -202,6 +219,11 @@ setup_frontend() {
         echo "Build output:"
         cat "$build_log_file"
         return 1
+    else
+        print_success "Build completed successfully"
+        echo "Build output summary:"
+        # Show the last few lines of build output for debugging
+        tail -n 10 "$build_log_file" | grep -E "(built|chunks|assets)" || echo "No build summary found"
     fi
     
     if [[ ! -d "dist" ]]; then
@@ -248,6 +270,20 @@ setup_frontend() {
             find "dist/assets" -type f | head -3 | while read -r file; do
                 echo "  - ${file#dist/}"
             done
+            
+            # Check if assets in index.html have correct base path
+            echo "Asset references in index.html:"
+            if [[ -n "$BASE_PATH" && "$BASE_PATH" != "/" ]]; then
+                if grep -o 'src="[^"]*assets/[^"]*"' "dist/index.html" | head -3; then
+                    echo "  Checking if assets use base path..."
+                    if grep -q "src=\"$BASE_PATH" "dist/index.html"; then
+                        print_success "Assets appear to use correct base path"
+                    else
+                        print_warning "Assets may not be using base path - checking further"
+                        grep -o 'src="[^"]*"' "dist/index.html" | head -3
+                    fi
+                fi
+            fi
         else
             print_warning "No assets directory found in build output"
         fi
