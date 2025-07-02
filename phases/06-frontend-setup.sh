@@ -170,6 +170,18 @@ setup_frontend() {
     # Build frontend for production
     print_step "Building frontend application"
     
+    # Debug environment configuration
+    print_step "Environment configuration for build:"
+    if [[ -f ".env" ]]; then
+        echo "  .env file contents (excluding sensitive data):"
+        grep -E '^VITE_' .env | grep -v 'API_KEY' | while IFS='=' read -r key value; do
+            echo "    $key=$value"
+        done
+    else
+        print_error "No .env file found for frontend build"
+        return 1
+    fi
+    
     # Capture build output for debugging
     local build_log_file="${TEMP_DIR}/npm_build.log"
     
@@ -198,6 +210,59 @@ setup_frontend() {
     fi
     
     print_success "Frontend built successfully"
+    
+    # Validate build output for base path configuration
+    print_step "Validating build output"
+    
+    if [[ -f "dist/index.html" ]]; then
+        # Check if index.html contains the correct base path
+        if [[ -n "$BASE_PATH" && "$BASE_PATH" != "/" ]]; then
+            local expected_base_path="${BASE_PATH}/"
+            if grep -q "base.*href.*$expected_base_path" "dist/index.html" 2>/dev/null; then
+                print_success "Base path correctly configured in built index.html"
+            else
+                print_warning "Base path may not be properly configured in built index.html"
+                echo "Expected base href: $expected_base_path"
+                echo "Found in index.html:"
+                grep -E "(base|href)" "dist/index.html" | head -3 || echo "No base tag found"
+                echo "Note: Vite should have replaced %VITE_BASE_PATH% with the actual base path"
+            fi
+        else
+            # For root installation, check for default base path
+            if grep -q 'base.*href.*"/"' "dist/index.html" 2>/dev/null; then
+                print_success "Root base path correctly configured in built index.html"
+            else
+                print_warning "Default base path may not be configured in built index.html"
+                echo "Found in index.html:"
+                grep -E "(base|href)" "dist/index.html" | head -3 || echo "No base tag found"
+            fi
+        fi
+        
+        # Check for assets directory and files
+        if [[ -d "dist/assets" ]]; then
+            local asset_files=$(find "dist/assets" -type f | wc -l)
+            print_success "Built assets directory contains $asset_files files"
+            
+            # Show asset file examples
+            echo "Sample built assets:"
+            find "dist/assets" -type f | head -3 | while read -r file; do
+                echo "  - ${file#dist/}"
+            done
+        else
+            print_warning "No assets directory found in build output"
+        fi
+        
+        # Check for static assets that may need base path handling
+        local static_patterns=("*.js" "*.css" "*.ico" "*.png" "*.svg")
+        for pattern in "${static_patterns[@]}"; do
+            if find "dist" -name "$pattern" -type f | grep -q .; then
+                echo "  Found files matching: $pattern"
+            fi
+        done
+    else
+        print_error "Build validation failed: index.html not found in dist/"
+        return 1
+    fi
     
     # Deploy built files to webroot
     print_step "Deploying frontend to webroot"
@@ -363,22 +428,38 @@ server {
     gzip_proxied any;
     gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
 
+    # IAMGickPro frontend assets (served with base path)
+    location ~ ^$BASE_PATH/assets/(.*)$ {
+        root $webroot;
+        try_files /assets/\$1 =404;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        
+        # CORS headers for fonts and other assets
+        add_header Access-Control-Allow-Origin "*";
+        add_header Access-Control-Allow-Methods "GET, OPTIONS";
+        add_header Access-Control-Allow-Headers "Range, Content-Type";
+    }
+    
+    # IAMGickPro static files (favicon, manifest, etc.)
+    location ~ ^$BASE_PATH/(favicon\.ico|manifest\.json|robots\.txt|.*\.(png|jpg|jpeg|gif|svg|webp|ico))$ {
+        root $webroot;
+        try_files /\$1 =404;
+        expires 1d;
+        add_header Cache-Control "public";
+    }
+    
     # IAMGickPro application at custom base path
     location $BASE_PATH {
-        alias $webroot;
+        root $webroot;
         index index.html;
         try_files \$uri \$uri/ @iamgickpro_fallback;
-        
-        # Handle assets properly
-        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
     }
     
     # Fallback for SPA routing
     location @iamgickpro_fallback {
-        rewrite ^.*$ $BASE_PATH/index.html last;
+        root $webroot;
+        try_files /index.html =404;
     }
 
     # API routes (backend processing) - prefixed with base path
@@ -521,6 +602,9 @@ EOF
     
     print_success "Frontend setup completed"
     
+    # Validate base path configuration
+    validate_base_path_configuration
+    
     # Update frontend hash cache after successful build
     print_step "Updating frontend change detection cache"
     local current_hash=$(cd "$frontend_source" && find . -name "*.vue" -o -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.css" -o -name "*.scss" | \
@@ -536,5 +620,95 @@ EOF
     print_success "Build cleanup completed"
 }
 
-# Run the setup
-setup_frontend
+# Validate base path configuration for asset serving
+validate_base_path_configuration() {
+    if [[ -n "$BASE_PATH" ]]; then
+        print_step "Validating base path configuration: $BASE_PATH"
+        
+        local webroot="$INSTALL_DIR/public"
+        
+        # Check if index.html exists and contains proper base path
+        if [[ -f "$webroot/index.html" ]]; then
+            if [[ -n "$BASE_PATH" && "$BASE_PATH" != "/" ]]; then
+                local expected_base_path="${BASE_PATH}/"
+                if grep -q "base.*href.*$expected_base_path" "$webroot/index.html" 2>/dev/null; then
+                    print_success "Base path correctly configured in index.html"
+                else
+                    print_warning "Base path may not be properly configured in index.html"
+                    echo "Expected to find base href with path: $expected_base_path"
+                    echo "First few lines of index.html:"
+                    head -n 10 "$webroot/index.html" | grep -E "(base|href)" || echo "No base tag found"
+                    echo "Note: If you see %VITE_BASE_PATH%, the Vite build may not have processed the template correctly"
+                fi
+            else
+                # Root installation should have base href="/"
+                if grep -q 'base.*href.*"/"' "$webroot/index.html" 2>/dev/null; then
+                    print_success "Root base path correctly configured in index.html"
+                else
+                    print_warning "Root base path may not be configured in index.html"
+                    echo "Expected to find: <base href=\"/\" />"
+                    echo "Found in index.html:"
+                    head -n 10 "$webroot/index.html" | grep -E "(base|href)" || echo "No base tag found"
+                fi
+            fi
+        fi
+        
+        # Check assets directory structure
+        if [[ -d "$webroot/assets" ]]; then
+            local asset_count=$(find "$webroot/assets" -type f | wc -l)
+            print_success "Assets directory contains $asset_count files"
+            
+            # Show sample asset paths for debugging
+            echo "Sample asset files:"
+            find "$webroot/assets" -type f | head -3 | while read -r file; do
+                echo "  - ${file#$webroot}"
+            done
+        else
+            print_warning "No assets directory found in $webroot"
+            echo "Directory contents:"
+            ls -la "$webroot" | head -10
+        fi
+        
+        # Test nginx configuration for base path
+        print_step "Testing nginx configuration for base path assets"
+        
+        # Create a test file to verify nginx serving
+        local test_file="$webroot/assets/test-asset.txt"
+        mkdir -p "$(dirname "$test_file")"
+        echo "Test asset for base path validation" > "$test_file"
+        
+        # Test if assets are accessible via base path
+        local test_url="http://localhost$BASE_PATH/assets/test-asset.txt"
+        if curl -s -f "$test_url" > /dev/null 2>&1; then
+            print_success "Base path asset serving test passed"
+        else
+            print_warning "Base path asset serving test failed"
+            echo "Test URL: $test_url"
+            echo "Nginx error log (last 5 lines):"
+            tail -n 5 /var/log/nginx/imagepro_error.log 2>/dev/null || echo "No error log found"
+        fi
+        
+        # Clean up test file
+        rm -f "$test_file"
+        
+        # Provide troubleshooting information
+        echo
+        echo -e "${CYAN}Base Path Configuration Summary:${NC}"
+        echo -e "${CYAN}Domain:${NC} $DOMAIN_NAME"
+        echo -e "${CYAN}Base Path:${NC} $BASE_PATH"
+        echo -e "${CYAN}Frontend URL:${NC} $FRONTEND_URL"
+        echo -e "${CYAN}Webroot:${NC} $webroot"
+        echo -e "${CYAN}Expected Asset URL:${NC} $FRONTEND_URL/assets/"
+        echo
+        echo -e "${YELLOW}Troubleshooting Tips:${NC}"
+        echo "1. Check nginx error log: tail -f /var/log/nginx/imagepro_error.log"
+        echo "2. Verify asset files exist: ls -la $webroot/assets/"
+        echo "3. Test asset access: curl -I $FRONTEND_URL/assets/index-*.js"
+        echo "4. Check nginx config: nginx -T | grep -A 50 'server_name $DOMAIN_NAME'"
+        echo
+    else
+        print_step "Root installation detected - no base path validation needed"
+    fi
+}
+
+# Run the frontend setup
