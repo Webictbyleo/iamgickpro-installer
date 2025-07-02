@@ -11,7 +11,10 @@ check_cached_config() {
         print_step "Found cached configuration from previous installation"
         
         # Load cached configuration
+        # Temporarily disable unbound variable checking for config loading
+        set +u
         source "$cached_config"
+        set -u
         
         # Handle cached installation directory
         if [[ -n "${INSTALL_DIR:-}" ]]; then
