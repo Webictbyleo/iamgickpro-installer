@@ -53,7 +53,8 @@ MAX_UPLOAD_SIZE=50M
 # REDIS_URL=redis://localhost:6379
 
 # Messenger Configuration (for async jobs)
-MESSENGER_TRANSPORT_DSN=doctrine://default
+# Use sync transport initially, can be changed to doctrine later
+MESSENGER_TRANSPORT_DSN=sync://
 
 # External Services
 UNSPLASH_ACCESS_KEY="$UNSPLASH_API_KEY"
