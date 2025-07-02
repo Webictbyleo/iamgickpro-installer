@@ -135,16 +135,13 @@ EOF
     
     cd "$backend_dir"
     
-    # Disable messenger transport during connection test to avoid automatic table creation
-    ORIGINAL_MESSENGER_DSN="${MESSENGER_TRANSPORT_DSN:-}"
-    export MESSENGER_TRANSPORT_DSN="sync://"
+ 
     
     # Use Symfony console to test database connection
     php bin/console doctrine:query:sql "SELECT 1" --env=prod &> /dev/null
     connection_result=$?
     
-    # Restore messenger DSN
-    export MESSENGER_TRANSPORT_DSN="$ORIGINAL_MESSENGER_DSN"
+   
     
     if [[ $connection_result -ne 0 ]]; then
         print_error "Application cannot connect to database"
@@ -157,11 +154,6 @@ EOF
     # Run database migrations or create schema
     print_step "Setting up database schema"
     
-    # Store original messenger DSN and set to sync for all database operations
-    ORIGINAL_MESSENGER_DSN="${MESSENGER_TRANSPORT_DSN:-}"
-    export MESSENGER_TRANSPORT_DSN="sync://"
-    print_step "Temporarily using sync messenger transport for database operations"
-    
     # Check if migration files exist
     if [[ -d "migrations" ]] && [[ -n "$(ls -A migrations/ 2>/dev/null | grep -E '\.php$')" ]]; then
         print_step "Found migration files, running migrations"
@@ -173,13 +165,13 @@ EOF
             print_warning "Migration failed, attempting to create schema directly"
             
             # Clear any partial schema and recreate
+           
             php bin/console doctrine:schema:drop --force --env=prod 2>/dev/null || true
             php bin/console doctrine:schema:create --env=prod 2>&1
             schema_result=$?
             
+            
             if [[ $schema_result -ne 0 ]]; then
-                # Restore messenger DSN before returning
-                export MESSENGER_TRANSPORT_DSN="$ORIGINAL_MESSENGER_DSN"
                 print_error "Failed to create database schema"
                 return 1
             fi
@@ -194,6 +186,9 @@ EOF
         # Check if this is a clean database setup (dropped and recreated)
         if [[ "${DATABASE_WAS_CLEARED:-false}" == "true" ]]; then
             print_step "Creating fresh database schema for clean install (database was cleared)"
+            
+            # Temporarily use sync transport to prevent automatic table creation
+            export MESSENGER_TRANSPORT_DSN="sync://"
             
             # Try schema:create first
             if php bin/console doctrine:schema:create --env=prod 2>&1; then
@@ -212,8 +207,6 @@ EOF
                     schema_result=$?
                     
                     if [[ $schema_result -ne 0 ]]; then
-                        # Restore messenger DSN before returning
-                        export MESSENGER_TRANSPORT_DSN="$ORIGINAL_MESSENGER_DSN"
                         print_error "Failed to create database schema for clean install"
                         return 1
                     fi
@@ -223,6 +216,7 @@ EOF
                     print_success "Database schema created after dropping existing tables"
                 fi
             fi
+            
         else
             # Use schema:update which handles existing tables gracefully
             print_step "Updating database schema to match entities"
@@ -238,8 +232,6 @@ EOF
                 schema_result=$?
                 
                 if [[ $schema_result -ne 0 ]]; then
-                    # Restore messenger DSN before returning
-                    export MESSENGER_TRANSPORT_DSN="$ORIGINAL_MESSENGER_DSN"
                     print_error "Failed to create database schema"
                     return 1
                 fi
@@ -250,10 +242,6 @@ EOF
             fi
         fi
     fi
-    
-    # Restore original messenger DSN after all database operations
-    export MESSENGER_TRANSPORT_DSN="$ORIGINAL_MESSENGER_DSN"
-    print_step "Restored original messenger transport configuration"
     
     # Verify database schema
     print_step "Verifying database schema"
