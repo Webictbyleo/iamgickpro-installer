@@ -319,6 +319,15 @@ server {
     location / {
         root $webroot;
         index index.html;
+        
+        # Handle base path scenarios where requests come with base path prefix
+        # Strip base path and try to serve the actual file, fallback to SPA routing
+        if (\$request_uri ~ ^${BASE_PATH:-}(.*)$) {
+            set \$stripped_path \$1;
+            rewrite ^.*$ \$stripped_path last;
+        }
+        
+        # Default SPA routing for requests without base path
         try_files \$uri \$uri/ /index.html;
     }
 
