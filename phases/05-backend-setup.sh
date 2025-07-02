@@ -141,18 +141,6 @@ setup_backend() {
     chmod -R 775 public/uploads/
     chmod -R 775 storage/
     
-    # Clear and warm up cache as www-data user
-    print_step "Optimizing application cache"
-    
-    sudo -u www-data php bin/console cache:clear --env=prod --no-debug &
-    spinner
-    wait $!
-    
-    sudo -u www-data php bin/console cache:warmup --env=prod --no-debug &
-    spinner  
-    wait $!
-    
-    print_success "Cache optimized"
     
     print_success "Required directories created and permissions set"
     
