@@ -556,6 +556,7 @@ prompt_for_existing_directory() {
         
         # Set installation directory as subdirectory
         INSTALL_DIR="$user_dir/iamgickpro"
+        export INSTALL_DIR_SPECIFIED=true
         print_step "Will install in: $INSTALL_DIR"
         break
     done
@@ -830,11 +831,13 @@ configure_installation_directory() {
             case $REPLY in
                 [Yy]*|"") 
                     INSTALL_DIR="$current_dir/iamgickpro"
+                    export INSTALL_DIR_SPECIFIED=true
                     print_step "Installing in: $INSTALL_DIR"
                     break
                     ;;
                 [Nn]*) 
                     prompt_for_existing_directory
+                    export INSTALL_DIR_SPECIFIED=true
                     break
                     ;;
                 *) 
@@ -846,6 +849,7 @@ configure_installation_directory() {
         echo -e "${YELLOW}Current directory is not a typical webroot directory${NC}"
         echo "Please provide an existing directory where IAMGickPro should be installed:"
         prompt_for_existing_directory
+        export INSTALL_DIR_SPECIFIED=true
     fi
     
     validate_install_directory

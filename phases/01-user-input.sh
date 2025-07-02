@@ -16,20 +16,26 @@ check_cached_config() {
         source "$cached_config"
         set -u
         
-        # Handle cached installation directory
-        if [[ -n "${INSTALL_DIR:-}" ]]; then
-            # Validate if cached directory still makes sense
-            local cached_install_dir="$INSTALL_DIR"
+        # Handle cached installation directory - but preserve user's choice if already set
+        local cached_install_dir="${INSTALL_DIR:-}"
+        
+        # Check if user has already specified a different installation directory
+        if [[ "${INSTALL_DIR_SPECIFIED:-false}" == "true" ]]; then
+            # User has explicitly chosen a directory, don't override with cached one
+            log "User specified installation directory: $INSTALL_DIR (ignoring cached: $cached_install_dir)"
+            print_step "Using user-specified installation directory: $INSTALL_DIR"
+        elif [[ -n "$cached_install_dir" ]]; then
+            # No user override, validate cached directory
             local parent_dir
             parent_dir="$(dirname "$cached_install_dir")"
             
             if [[ ! -d "$parent_dir" ]] || [[ ! -w "$parent_dir" ]]; then
                 print_warning "Cached installation directory is no longer accessible: $cached_install_dir"
-                print_step "Reverting to default directory: $DEFAULT_INSTALL_DIR"
-                INSTALL_DIR="$DEFAULT_INSTALL_DIR"
-                log "Cached installation directory invalid, using default"
+                print_step "Reverting to previously chosen directory: $INSTALL_DIR"
+                log "Cached installation directory invalid, keeping current choice: $INSTALL_DIR"
             else
-                log "Using cached installation directory: $INSTALL_DIR"
+                # Only use cached directory if user hasn't specified one
+                log "Using cached installation directory: $cached_install_dir"
             fi
         fi
         
@@ -60,8 +66,10 @@ check_cached_config() {
                     print_step "Starting fresh configuration"
                     log "User chose to reconfigure instead of using cache"
                     
+                    # Store current installation directory before clearing
+                    local current_install_dir="$INSTALL_DIR"
+                    
                     # Clear all cached variables to force fresh input (set to empty strings)
-                    INSTALL_DIR="$DEFAULT_INSTALL_DIR"  # Reset to default
                     DOMAIN_NAME=""
                     DB_NAME=""
                     DB_USER=""
@@ -85,7 +93,18 @@ check_cached_config() {
                     INSTALL_IMAGEMAGICK=true
                     INSTALL_FFMPEG=true
                     
-                    print_success "All configuration variables cleared for fresh input"
+                    # Restore installation directory (don't override user's choice)
+                    if [[ "${INSTALL_DIR_SPECIFIED:-false}" == "true" ]]; then
+                        # Keep user's specified directory
+                        INSTALL_DIR="$current_install_dir"
+                        log "Preserving user-specified installation directory: $INSTALL_DIR"
+                    else
+                        # Reset to default if no user specification
+                        INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+                        log "Reset installation directory to default: $INSTALL_DIR"
+                    fi
+                    
+                    print_success "Configuration variables cleared while preserving installation directory choice"
                     return 1
                     ;;
                 *) 
