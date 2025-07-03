@@ -256,6 +256,12 @@ server {
     gzip_proxied any;
     gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
 
+    # Handle base path scenarios where requests come with base path prefix
+    # Strip base path and try to serve the actual file, fallback to SPA routing
+    if (\$request_uri ~ ^${BASE_PATH:-}(.*)$) {
+        set \$stripped_path \$1;
+        rewrite ^.*$ \$stripped_path last;
+    }
     # API routes (backend processing)
     location /api/ {
         root $INSTALL_DIR/backend/public;
@@ -315,12 +321,7 @@ server {
         fastcgi_busy_buffers_size 256k;
     }
 
-    # Handle base path scenarios where requests come with base path prefix
-    # Strip base path and try to serve the actual file, fallback to SPA routing
-    if (\$request_uri ~ ^${BASE_PATH:-}(.*)$) {
-        set \$stripped_path \$1;
-        rewrite ^.*$ \$stripped_path last;
-    }
+    
 
     # Frontend routes (SPA) - must be last to catch all remaining routes
     location / {
