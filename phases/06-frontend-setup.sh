@@ -390,14 +390,3 @@ setup_frontend
                         sort | xargs md5sum 2>/dev/null | md5sum | cut -d' ' -f1)
     echo "$current_hash" > "$TEMP_DIR/.frontend_hash"
     print_success "Frontend hash cache updated"
-    
-
-    
-    # Cleanup temporary build directory
-    print_step "Cleaning up build files"
-     rm -rf "$frontend_build_dir"
-    print_success "Build cleanup completed"
-}
-
-# Run the frontend setup
-setup_frontend
