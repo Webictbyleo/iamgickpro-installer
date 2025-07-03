@@ -264,7 +264,7 @@ server {
 
     # Consolidated backend routes - handles all backend paths in one block
     # Matches: /api/, /media/, /uploads/, /storage/, /thumbnails/, /secure-media/
-    location ~ ^/(api|media|uploads|storage|thumbnails|secure-media)/ {
+    location ~ /(api|media|uploads|storage|thumbnails|secure-media)/ {
         root $INSTALL_DIR/backend/public;
         try_files \$uri /index.php\$is_args\$args;
     }
