@@ -256,53 +256,20 @@ server {
     gzip_proxied any;
     gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
 
-    # Handle base path scenarios where requests come with base path prefix
-    # Strip base path and try to serve the actual file
+    # Check if request has base path and strip it
+    set \$clean_uri \$request_uri;
     if (\$request_uri ~ ^${BASE_PATH:-}(.*)$) {
-        set \$stripped_path \$1;
-        rewrite ^.*$ \$stripped_path last;
+        set \$clean_uri \$1;
     }
-    # API routes (backend processing)
-    location /api/ {
+
+    # Consolidated backend routes - handles all backend paths in one block
+    # Matches: /api/, /media/, /uploads/, /storage/, /thumbnails/, /secure-media/
+    location ~ ^/(api|media|uploads|storage|thumbnails|secure-media)/ {
         root $INSTALL_DIR/backend/public;
         try_files \$uri /index.php\$is_args\$args;
     }
 
-    # Media file routes (serve from backend)
-    location /media/ {
-       root $INSTALL_DIR/backend/public;
-        try_files \$uri /index.php\$is_args\$args;
-    }
-
-    # Upload file routes (serve from backend)
-    location /uploads/ {
-        root $INSTALL_DIR/backend/public;
-        try_files \$uri /index.php\$is_args\$args;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    # Storage file routes (serve from backend)
-    location /storage/ {
-        root $INSTALL_DIR/backend/public;
-        try_files \$uri /index.php\$is_args\$args;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    # Thumbnail routes (serve from backend)
-    location /thumbnails/ {
-        root $INSTALL_DIR/backend/public;
-        try_files \$uri /index.php\$is_args\$args;
-    }
-
-    # Secure media routes (serve from backend with security checks)
-    location /secure-media/ {
-        root $INSTALL_DIR/backend/public;
-        try_files \$uri /index.php\$is_args\$args;
-    }
-
-    # Handle PHP files in API
+    # Handle PHP files
     location ~ \.php$ {
         root $INSTALL_DIR/backend/public;
         include snippets/fastcgi-php.conf;
@@ -310,6 +277,9 @@ server {
         fastcgi_pass unix:/run/php/php8.4-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         fastcgi_param PATH_INFO \$fastcgi_path_info;
+        
+        # Pass the clean URI to PHP
+        fastcgi_param REQUEST_URI \$clean_uri;
         
         # Security and timeouts
         fastcgi_hide_header X-Powered-By;
@@ -321,14 +291,11 @@ server {
         fastcgi_busy_buffers_size 256k;
     }
 
-    
-
     # Frontend routes (SPA) - must be last to catch all remaining routes
     location / {
         root $webroot;
         index index.html;
-        # Default SPA routing for requests without base path
-        try_files \$uri \$uri/ /index.html;
+        try_files \$uri \$uri/ \$clean_uri \$clean_uri/ /index.html;
     }
 
     # Security: deny access to sensitive files
@@ -400,6 +367,23 @@ EOF
     
     print_success "Frontend setup completed"
     
+    # Update frontend hash cache after successful build
+    print_step "Updating frontend change detection cache"
+    local current_hash=$(cd "$frontend_source" && find . -name "*.vue" -o -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.css" -o -name "*.scss" | \
+                        sort | xargs md5sum 2>/dev/null | md5sum | cut -d' ' -f1)
+    echo "$current_hash" > "$TEMP_DIR/.frontend_hash"
+    print_success "Frontend hash cache updated"
+    
+
+    
+    # Cleanup temporary build directory
+    print_step "Cleaning up build files"
+     rm -rf "$frontend_build_dir"
+    print_success "Build cleanup completed"
+}
+
+# Run the frontend setup
+setup_frontend
     # Update frontend hash cache after successful build
     print_step "Updating frontend change detection cache"
     local current_hash=$(cd "$frontend_source" && find . -name "*.vue" -o -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.css" -o -name "*.scss" | \
