@@ -107,24 +107,8 @@ final_configuration() {
     systemctl status iamgickpro-worker.service --no-pager -l
     
     print_success "Background services started"
+   
     
-    # Configure firewall
-    print_step "Configuring firewall"
-    
-    if command -v ufw &> /dev/null; then
-        ufw allow OpenSSH
-        ufw allow 'Nginx Full'
-        ufw --force enable
-        print_success "UFW firewall configured"
-    elif command -v firewall-cmd &> /dev/null; then
-        firewall-cmd --permanent --add-service=ssh
-        firewall-cmd --permanent --add-service=http
-        firewall-cmd --permanent --add-service=https
-        firewall-cmd --reload
-        print_success "Firewalld configured"
-    else
-        print_warning "No firewall detected - please configure manually"
-    fi
     
     # Create log rotation configuration
     print_step "Configuring log rotation"
